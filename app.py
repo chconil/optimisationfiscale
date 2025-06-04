@@ -205,6 +205,104 @@ def main():
             
             st.plotly_chart(fig_pie, use_container_width=True)
         
+        # Résumé détaillé complet
+        st.subheader("📋 Résumé Détaillé de l'Optimisation")
+        
+        # Colonnes pour l'affichage du résumé
+        col_resume1, col_resume2, col_resume3 = st.columns(3)
+        
+        with col_resume1:
+            st.markdown("**🏢 NIVEAU SARL**")
+            st.info(f"""
+            **Résultat initial :** {resultat_initial:,.0f}€  
+            **Charges existantes :** {charges_existantes:,.0f}€  
+            **Résultat avant rémun. :** {resultat_initial - charges_existantes:,.0f}€  
+            
+            **Rémunération brute :** {meilleur_avec_niches['remuneration_brute']:,.0f}€  
+            **Cotisations TNS :** {meilleur_avec_niches['cotisations_tns']:,.0f}€  
+            **Résultat après rémun. :** {meilleur_avec_niches['resultat_apres_remuneration']:,.0f}€  
+            
+            **IS SARL :** {meilleur_avec_niches['is_sarl']:,.0f}€  
+            **Dividendes SARL :** {meilleur_avec_niches['dividendes_sarl']:,.0f}€
+            """)
+        
+        with col_resume2:
+            st.markdown("**💼 NIVEAU PERSONNEL**")
+            st.success(f"""
+            **Rémunération nette avant IR :** {meilleur_avec_niches['remuneration_nette_avant_ir']:,.0f}€  
+            **Abattement frais pro (10%) :** {meilleur_avec_niches['abattement_frais_pro']:,.0f}€  
+            **Revenu imposable initial :** {meilleur_avec_niches['revenu_imposable']:,.0f}€  
+            
+            **Déductions fiscales :**  
+            • PER : {meilleur_avec_niches.get('per_deduction', 0):,.0f}€  
+            • Madelin : {meilleur_avec_niches.get('madelin_deduction', 0):,.0f}€  
+            **Revenu imposable final :** {meilleur_avec_niches.get('revenu_imposable_final', meilleur_avec_niches['revenu_imposable']):,.0f}€  
+            
+            **IR avant Girardin :** {meilleur_avec_niches.get('ir_avant_girardin', meilleur_avec_niches['ir_remuneration']):,.0f}€  
+            **Réduction Girardin :** {meilleur_avec_niches.get('reduction_girardin', 0):,.0f}€  
+            **IR final :** {meilleur_avec_niches['ir_remuneration']:,.0f}€  
+            
+            **💰 Salaire net après IR :** {meilleur_avec_niches['remuneration_nette_apres_ir']:,.0f}€
+            """)
+        
+        with col_resume3:
+            st.markdown("**🏠 NIVEAU HOLDING + FINAL**")
+            st.warning(f"""
+            **Dividendes reçus :** {meilleur_avec_niches['dividendes_sarl']:,.0f}€  
+            **Quote-part imposable (5%) :** {meilleur_avec_niches['quote_part_imposable']:,.0f}€  
+            **IS Holding :** {meilleur_avec_niches['is_holding']:,.0f}€  
+            **Dividendes dans holding :** {meilleur_avec_niches['dividendes_holding']:,.0f}€  
+            
+            **Flat tax (30%) :** {meilleur_avec_niches['flat_tax']:,.0f}€  
+            **💎 Dividendes nets :** {meilleur_avec_niches['dividendes_nets']:,.0f}€  
+            
+            **🎯 TOTAL NET PERÇU :** {meilleur_avec_niches['total_net']:,.0f}€  
+            **Taux prélèvement global :** {meilleur_avec_niches['taux_prelevement_global']:.1f}%
+            """)
+        
+        # Tableau récapitulatif des économies d'impôts si optimisations
+        if any(meilleur_avec_niches['optimisations'][k] > 0 for k in ['per', 'madelin', 'girardin']):
+            st.subheader("💰 Détail des Économies d'Impôts")
+            
+            col_eco1, col_eco2, col_eco3, col_eco4 = st.columns(4)
+            
+            with col_eco1:
+                if meilleur_avec_niches['optimisations']['per'] > 0:
+                    economie_per = meilleur_avec_niches.get('per_deduction', 0) * 0.30  # Estimation 30% d'économie
+                    st.metric("📈 PER", f"{meilleur_avec_niches['optimisations']['per']:,.0f}€", f"Économie: {economie_per:,.0f}€")
+                else:
+                    st.metric("📈 PER", "Non utilisé", "0€")
+            
+            with col_eco2:
+                if meilleur_avec_niches['optimisations']['madelin'] > 0:
+                    economie_madelin = meilleur_avec_niches.get('madelin_deduction', 0) * 0.30  # Estimation 30% d'économie
+                    st.metric("🏥 Madelin", f"{meilleur_avec_niches['optimisations']['madelin']:,.0f}€", f"Économie: {economie_madelin:,.0f}€")
+                else:
+                    st.metric("🏥 Madelin", "Non utilisé", "0€")
+            
+            with col_eco3:
+                if meilleur_avec_niches['optimisations']['girardin'] > 0:
+                    st.metric("🏭 Girardin (DÉPENSE)", f"{meilleur_avec_niches['optimisations']['girardin']:,.0f}€", f"Réduction: {meilleur_avec_niches.get('reduction_girardin', 0):,.0f}€")
+                else:
+                    st.metric("🏭 Girardin", "Non utilisé", "0€")
+            
+            with col_eco4:
+                st.metric("💰 TOTAL ÉCONOMIES", f"{meilleur_avec_niches['optimisations']['economies_ir']:,.0f}€", f"vs sans optim: +{meilleur_avec_niches['total_net'] - meilleur_classique['total_net']:,.0f}€")
+        
+        # Comparaison avec/sans optimisations
+        st.subheader("⚖️ Comparaison Avec/Sans Optimisations")
+        col_comp1, col_comp2, col_comp3 = st.columns(3)
+        
+        with col_comp1:
+            st.metric("💰 Sans optimisations", f"{meilleur_classique['total_net']:,.0f}€", "Référence")
+        
+        with col_comp2:
+            st.metric("🎯 Avec optimisations", f"{meilleur_avec_niches['total_net']:,.0f}€", f"+{meilleur_avec_niches['total_net'] - meilleur_classique['total_net']:,.0f}€")
+        
+        with col_comp3:
+            amelioration = ((meilleur_avec_niches['total_net'] / meilleur_classique['total_net']) - 1) * 100
+            st.metric("📈 Amélioration", f"+{amelioration:.1f}%", f"Gain: {meilleur_avec_niches['total_net'] - meilleur_classique['total_net']:,.0f}€")
+        
         # Graphiques de comparaison
         st.subheader("📈 Analyses Détaillées")
         
