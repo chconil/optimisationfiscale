@@ -484,13 +484,13 @@ def create_optimization_chart(scenarios):
     is_sarl = [s['is_sarl'] for s in scenarios_valides]
     flat_tax = [s['flat_tax'] for s in scenarios_valides]
     
-    # Créer des sous-graphiques
+    # Créer des sous-graphiques (2x2 - 1)
     fig = sp.make_subplots(
         rows=2, cols=2,
         subplot_titles=('Optimisation du revenu net total', 
                       'Taux de prélèvement global',
-                      'Répartition salaire/dividendes', 
-                      'Composition des prélèvements'),
+                      'Composition des prélèvements',
+                      ''),
         specs=[[{"secondary_y": False}, {"secondary_y": False}],
                [{"secondary_y": False}, {"secondary_y": False}]]
     )
@@ -544,34 +544,7 @@ def create_optimization_chart(scenarios):
         row=1, col=2
     )
     
-    # Graphique 3 : Répartition salaire/dividendes
-    fig.add_trace(
-        go.Scatter(
-            x=remunerations, 
-            y=remunerations_nettes,
-            mode='lines',
-            name='Salaire net',
-            line=dict(color='green', width=3),
-            hovertemplate='<b>Rémunération brute:</b> %{x:,.0f}€<br>' +
-                         '<b>Salaire net:</b> %{y:,.0f}€<extra></extra>'
-        ),
-        row=2, col=1
-    )
-    
-    fig.add_trace(
-        go.Scatter(
-            x=remunerations, 
-            y=dividendes_nets,
-            mode='lines',
-            name='Dividendes nets',
-            line=dict(color='purple', width=3),
-            hovertemplate='<b>Rémunération brute:</b> %{x:,.0f}€<br>' +
-                         '<b>Dividendes nets:</b> %{y:,.0f}€<extra></extra>'
-        ),
-        row=2, col=1
-    )
-    
-    # Graphique 4 : Composition des prélèvements (en aires empilées)
+    # Graphique 3 : Composition des prélèvements (déplacé en position 2,1)
     fig.add_trace(
         go.Scatter(
             x=remunerations, 
@@ -583,7 +556,7 @@ def create_optimization_chart(scenarios):
             hovertemplate='<b>Rémunération:</b> %{x:,.0f}€<br>' +
                          '<b>Cotisations TNS:</b> %{y:,.0f}€<extra></extra>'
         ),
-        row=2, col=2
+        row=2, col=1
     )
     
     fig.add_trace(
@@ -598,7 +571,7 @@ def create_optimization_chart(scenarios):
                          '<b>IR:</b> %{customdata:,.0f}€<extra></extra>',
             customdata=ir
         ),
-        row=2, col=2
+        row=2, col=1
     )
     
     fig.add_trace(
@@ -613,7 +586,7 @@ def create_optimization_chart(scenarios):
                          '<b>IS SARL:</b> %{customdata:,.0f}€<extra></extra>',
             customdata=is_sarl
         ),
-        row=2, col=2
+        row=2, col=1
     )
     
     fig.add_trace(
@@ -628,12 +601,12 @@ def create_optimization_chart(scenarios):
                          '<b>Flat tax:</b> %{customdata:,.0f}€<extra></extra>',
             customdata=flat_tax
         ),
-        row=2, col=2
+        row=2, col=1
     )
     
     # Mise en forme
     fig.update_layout(
-        height=800,
+        height=800,  # Hauteur normale pour 3 graphiques
         title_text="Optimisation Fiscale SARL + Holding - Analyse Interactive",
         title_x=0.5,
         title_font_size=16,
@@ -641,16 +614,16 @@ def create_optimization_chart(scenarios):
         hovermode='closest'
     )
     
-    # Formatage des axes
-    for i in range(1, 3):
-        for j in range(1, 3):
+    # Formatage des axes pour tous les graphiques
+    for i in range(1, 3):  # 2 rangées
+        for j in range(1, 3):  # 2 colonnes
             fig.update_xaxes(title_text="Rémunération de gérance (€)", row=i, col=j)
             fig.update_xaxes(tickformat=",", row=i, col=j)
     
+    # Titre des axes Y
     fig.update_yaxes(title_text="Total net perçu (€)", tickformat=",", row=1, col=1)
     fig.update_yaxes(title_text="Taux (%)", row=1, col=2)
-    fig.update_yaxes(title_text="Montant net (€)", tickformat=",", row=2, col=1)
-    fig.update_yaxes(title_text="Prélèvements cumulés (€)", tickformat=",", row=2, col=2)
+    fig.update_yaxes(title_text="Prélèvements cumulés (€)", tickformat=",", row=2, col=1)
     
     return fig
 
