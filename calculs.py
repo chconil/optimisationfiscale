@@ -196,7 +196,7 @@ class OptimisationRemunerationSARL:
         }
         
         # 5. Calcul du résultat après rémunération
-        resultat_apres_remuneration = self.resultat_avant_remuneration - remuneration_gerance - cotisations_tns - cotisations_tns
+        resultat_apres_remuneration = self.resultat_avant_remuneration - remuneration_gerance - cotisations_tns
         resultats['resultat_apres_remuneration'] = resultat_apres_remuneration
         
         # 6. Calcul de l'IS
