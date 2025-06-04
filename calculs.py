@@ -236,34 +236,31 @@ class OptimisationRemunerationSARL:
         return resultats
     
     def optimiser(self, pas=5000, min_salaire=0, max_salaire=None):
-        """Trouve la rémunération optimale sans optimisations fiscales avec recherche en 2 phases"""
+        """Trouve la rémunération optimale basée sur l'efficacité économique réelle"""
         if max_salaire is None:
             max_salaire = self.resultat_avant_remuneration
         
-        # Phase 1: Recherche exhaustive 
-        scenarios_grossiers = []
+        scenarios = []
         
         # Recherche fine sur TOUT le range (pas de 500€)
         pas_fin_global = 500
         for remuneration in range(min_salaire, max_salaire + 1, pas_fin_global):
             scenario = self.calculer_scenario(remuneration)
-            scenarios_grossiers.append(scenario)
+            
+            # Calculer le coût économique réel de chaque composante
+            scenario['cout_economique_total'] = self._calculer_cout_economique_total(scenario)
+            
+            scenarios.append(scenario)
         
-        # Trouver le meilleur de la phase grossière
-        meilleur_grossier = max(scenarios_grossiers, key=lambda x: x['total_net'])
-        remuneration_optimale_approx = meilleur_grossier['remuneration_brute']
-        
-        # Avec recherche exhaustive, pas besoin de phase 2
-        scenarios = scenarios_grossiers
         scenarios.sort(key=lambda x: x['remuneration_brute'])
         
-        # Trouver le meilleur final
-        meilleur_scenario = max(scenarios, key=lambda x: x['total_net'])
+        # Trouver le mix optimal basé sur l'efficacité économique
+        meilleur_scenario = self._trouver_mix_optimal(scenarios)
         
         return meilleur_scenario, scenarios
     
     def optimiser_avec_niches(self, pas=5000, min_salaire=0, max_salaire=None, per_max=None, madelin_max=None, girardin_max=None):
-        """Trouve la rémunération optimale en incluant les optimisations fiscales"""
+        """Trouve la rémunération optimale en incluant les optimisations fiscales basée sur l'efficacité économique"""
         if max_salaire is None:
             max_salaire = self.resultat_avant_remuneration
         if per_max is None:
@@ -274,7 +271,7 @@ class OptimisationRemunerationSARL:
             girardin_max = 50000  # Limite raisonnable pour Girardin
         
         meilleur_scenario = None
-        meilleur_net = 0
+        meilleur_efficacite = 0
         tous_scenarios = []
         
         # Test différentes combinaisons d'optimisations
@@ -310,16 +307,21 @@ class OptimisationRemunerationSARL:
                     scenario['nom_strategie'] = f"PER:{optimisations['per']:,}€ | Madelin:{optimisations['madelin']:,}€ | Girardin:{optimisations['girardin']:,}€"
                     scenarios_optim.append(scenario)
             
-            # Mise à jour du meilleur scénario global
+            # Mise à jour du meilleur scénario global basé sur l'efficacité économique
             for scenario in scenarios_optim:
-                if scenario['total_net'] > meilleur_net:
-                    meilleur_net = scenario['total_net']
+                # Calculer le coût économique pour ce scénario
+                scenario['cout_economique_total'] = self._calculer_cout_economique_total(scenario)
+                cout_eco = scenario['cout_economique_total']
+                efficacite = scenario['total_net'] / cout_eco['cout_total'] if cout_eco['cout_total'] > 0 else 0
+                
+                if efficacite > meilleur_efficacite:
+                    meilleur_efficacite = efficacite
                     meilleur_scenario = scenario
             
             tous_scenarios.append({
                 'optimisations': optimisations,
                 'scenarios': scenarios_optim,
-                'meilleur': max(scenarios_optim, key=lambda x: x['total_net'])
+                'meilleur': max(scenarios_optim, key=lambda x: x['cout_economique_total']['efficacite_globale'] if 'cout_economique_total' in x else x['total_net'])
             })
         
         return meilleur_scenario, tous_scenarios
@@ -344,9 +346,13 @@ class OptimisationRemunerationSARL:
             scenario['nom_strategie'] = f"PER:{optimisations['per']:,}€ | Madelin:{optimisations['madelin']:,}€ | Girardin:{optimisations['girardin']:,}€"
             scenarios_grossiers.append(scenario)
         
+        # Calculer coût économique pour chaque scénario grossier
+        for s in scenarios_grossiers:
+            s['cout_economique_total'] = self._calculer_cout_economique_total(s)
+        
         # Trouver la rémunération qui utilise le mieux Girardin
-        # Critère : maximiser la réduction Girardin utilisée tout en optimisant le total net
-        meilleur_grossier = max(scenarios_grossiers, key=lambda x: x['total_net'])
+        # Critère : maximiser l'efficacité économique tout en optimisant l'usage Girardin
+        meilleur_grossier = max(scenarios_grossiers, key=lambda x: x['cout_economique_total']['efficacite_globale'])
         remuneration_optimale_approx = meilleur_grossier['remuneration_brute']
         
         # Phase 2: Recherche fine autour de la zone optimale
@@ -362,9 +368,10 @@ class OptimisationRemunerationSARL:
             )
             scenario['nom_strategie'] = f"PER:{optimisations['per']:,}€ | Madelin:{optimisations['madelin']:,}€ | Girardin:{optimisations['girardin']:,}€"
             
-            # Ajouter des métriques d'efficacité Girardin
+            # Ajouter des métriques d'efficacité Girardin et économique
             scenario['efficacite_girardin'] = scenario['reduction_girardin'] / reduction_theorique if reduction_theorique > 0 else 0
             scenario['ir_genere'] = scenario['ir_avant_girardin']
+            scenario['cout_economique_total'] = self._calculer_cout_economique_total(scenario)
             
             scenarios.append(scenario)
         
@@ -378,6 +385,66 @@ class OptimisationRemunerationSARL:
             scenarios = list(scenarios_uniques.values())
         
         return scenarios
+    
+    def _calculer_cout_economique_total(self, scenario):
+        """Calcule le coût économique réel d'un scénario"""
+        # Coût de la rémunération = (net + IR) × 1.4 pour tenir compte du coût économique
+        net_remuneration = scenario['remuneration_nette_apres_ir']
+        ir_remuneration = scenario['ir_remuneration']
+        cout_remuneration = (net_remuneration + ir_remuneration) * 1.4
+        
+        # Coût des dividendes = résultat avant IS nécessaire pour générer les dividendes nets
+        dividendes_nets = max(0, scenario['dividendes_nets'])  # Pas de dividendes négatifs
+        if dividendes_nets > 0:
+            # Remontée de la chaîne: nets → holding → sarl → avant IS
+            dividendes_holding = dividendes_nets / 0.70  # Avant flat tax 30%
+            taux_is_holding_effectif = 0.05 * 0.25  # 1.25%
+            dividendes_sarl = dividendes_holding / (1 - taux_is_holding_effectif)
+            
+            # Calcul IS SARL selon tranches
+            if dividendes_sarl <= 42500:
+                is_sarl = dividendes_sarl * 0.15
+            else:
+                is_sarl = 42500 * 0.15 + (dividendes_sarl - 42500) * 0.25
+            
+            cout_dividendes = dividendes_sarl + is_sarl
+        else:
+            cout_dividendes = 0
+        
+        cout_total = cout_remuneration + cout_dividendes
+        
+        return {
+            'cout_remuneration': cout_remuneration,
+            'cout_dividendes': cout_dividendes,
+            'cout_total': cout_total,
+            'efficacite_globale': scenario['total_net'] / cout_total if cout_total > 0 else 0
+        }
+    
+    def _trouver_mix_optimal(self, scenarios):
+        """Trouve le mix optimal en analysant l'efficacité économique"""
+        # Calculer pour chaque niveau de net, quel est le coût optimal
+        total_net_cible = max(s['total_net'] for s in scenarios)
+        
+        # Analyse de l'efficacité marginale pour trouver le point d'équilibre
+        scenarios_tries = sorted(scenarios, key=lambda x: x['total_net'])
+        
+        meilleur_efficacite = 0
+        meilleur_scenario = None
+        
+        for scenario in scenarios_tries:
+            if scenario['total_net'] > 0:
+                cout_eco = scenario['cout_economique_total']
+                efficacite = scenario['total_net'] / cout_eco['cout_total']
+                
+                if efficacite > meilleur_efficacite:
+                    meilleur_efficacite = efficacite
+                    meilleur_scenario = scenario
+        
+        # Si aucun scénario optimal trouvé, prendre celui avec le meilleur total_net
+        if meilleur_scenario is None:
+            meilleur_scenario = max(scenarios, key=lambda x: x['total_net'])
+        
+        return meilleur_scenario
     
     def afficher_resultat(self, resultat):
         """Affiche les résultats de manière formatée"""
