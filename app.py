@@ -93,9 +93,9 @@ def main():
             girardin_max = st.slider(
                 "Montant d'investissement Girardin (€)",
                 min_value=0,
-                max_value=100000,
-                value=50000,
-                step=5000,
+                max_value=40000,
+                value=20000,
+                step=1000,
                 help="Montant de l'investissement (dépense) qui génère la réduction d'impôt"
             )
         
@@ -322,152 +322,11 @@ def main():
             amelioration = ((meilleur_avec_niches['total_net'] / meilleur_classique['total_net']) - 1) * 100
             st.metric("📈 Amélioration", f"+{amelioration:.1f}%", f"Gain: {meilleur_avec_niches['total_net'] - meilleur_classique['total_net']:,.0f}€")
         
-        # Graphiques de comparaison
-        st.subheader("📈 Analyses Détaillées")
-        
-        tabs = st.tabs(["🎯 Comparaison Stratégies", "📊 Optimisation Détaillée"])
-        
-        with tabs[0]:
-            # Graphique de comparaison des stratégies
-            fig_comp = create_comparison_chart(tous_scenarios_niches)
-            st.plotly_chart(fig_comp, use_container_width=True)
-            
-            # Tableau de synthèse
-            st.subheader("📋 Synthèse des Stratégies")
-            create_strategy_table(tous_scenarios_niches)
-        
-        with tabs[1]:
-            # Graphique d'optimisation classique
-            fig_opt = create_optimization_chart(scenarios_classiques)
-            st.plotly_chart(fig_opt, use_container_width=True)
+        # Graphique d'optimisation unique
+        st.subheader("📈 Analyse Détaillée")
+        fig_opt = create_optimization_chart(scenarios_classiques)
+        st.plotly_chart(fig_opt, use_container_width=True)
 
-def create_comparison_chart(tous_scenarios):
-    """Crée le graphique de comparaison des stratégies"""
-    fig = sp.make_subplots(
-        rows=2, cols=2,
-        subplot_titles=('Comparaison des stratégies par rémunération', 
-                      'Gain net par stratégie',
-                      'Économies d\'impôt par stratégie', 
-                      'Taux de prélèvement par stratégie'),
-        specs=[[{"secondary_y": False}, {"secondary_y": False}],
-               [{"secondary_y": False}, {"secondary_y": False}]]
-    )
-    
-    couleurs = ['blue', 'green', 'red', 'purple', 'orange', 'brown', 'pink', 'gray']
-    
-    # Données pour comparaison
-    meilleurs_par_strategie = []
-    noms_strategies = []
-    
-    for i, strategie in enumerate(tous_scenarios):
-        scenarios = strategie['scenarios']
-        optimisations = strategie['optimisations']
-        
-        # Utiliser tous les scénarios (dividendes négatifs désormais gérés correctement)
-        scenarios_valides = scenarios
-        
-        # Nom de la stratégie
-        nom = f"PER:{optimisations['per']:,} | Mad:{optimisations['madelin']:,} | Gir:{optimisations['girardin']:,}"
-        noms_strategies.append(nom)
-        meilleurs_par_strategie.append(strategie['meilleur'])
-        
-        remunerations = [s['remuneration_brute'] for s in scenarios_valides]
-        totaux_nets = [s['total_net'] for s in scenarios_valides]
-        taux_prelevements = [s['taux_prelevement_global'] for s in scenarios_valides]
-        economies = [s['optimisations']['economies_ir'] for s in scenarios_valides]
-        
-        couleur = couleurs[i % len(couleurs)]
-        
-        # Graphique 1 : Courbes par rémunération
-        fig.add_trace(
-            go.Scatter(
-                x=remunerations, 
-                y=totaux_nets,
-                mode='lines',
-                name=nom,
-                line=dict(color=couleur, width=2),
-                hovertemplate='<b>%{fullData.name}</b><br>' +
-                             'Rémunération: %{x:,.0f}€<br>' +
-                             'Total net: %{y:,.0f}€<extra></extra>',
-                showlegend=(i < 4)  # Limiter la légende
-            ),
-            row=1, col=1
-        )
-        
-        # Graphique 3 : Économies d'impôt
-        fig.add_trace(
-            go.Scatter(
-                x=remunerations, 
-                y=economies,
-                mode='lines',
-                name=f'Économies {nom}',
-                line=dict(color=couleur, width=2, dash='dash'),
-                hovertemplate='<b>%{fullData.name}</b><br>' +
-                             'Rémunération: %{x:,.0f}€<br>' +
-                             'Économies: %{y:,.0f}€<extra></extra>',
-                showlegend=False
-            ),
-            row=2, col=1
-        )
-        
-        # Graphique 4 : Taux de prélèvement
-        fig.add_trace(
-            go.Scatter(
-                x=remunerations, 
-                y=taux_prelevements,
-                mode='lines',
-                name=f'Taux {nom}',
-                line=dict(color=couleur, width=2, dash='dot'),
-                hovertemplate='<b>%{fullData.name}</b><br>' +
-                             'Rémunération: %{x:,.0f}€<br>' +
-                             'Taux: %{y:.1f}%<extra></extra>',
-                showlegend=False
-            ),
-            row=2, col=2
-        )
-    
-    # Graphique 2 : Barres comparatives des meilleurs gains
-    gains_nets = [s['total_net'] for s in meilleurs_par_strategie]
-    remunerations_opt = [s['remuneration_brute'] for s in meilleurs_par_strategie]
-    economies_totales = [s['optimisations']['economies_ir'] for s in meilleurs_par_strategie]
-    
-    fig.add_trace(
-        go.Bar(
-            x=noms_strategies,
-            y=gains_nets,
-            name='Gain net optimal',
-            marker_color=couleurs[:len(noms_strategies)],
-            hovertemplate='<b>%{x}</b><br>' +
-                         'Gain net optimal: %{y:,.0f}€<br>' +
-                         'Rémunération optimale: %{customdata:,.0f}€<extra></extra>',
-            customdata=remunerations_opt,
-            showlegend=False
-        ),
-        row=1, col=2
-    )
-    
-    # Mise en forme
-    fig.update_layout(
-        height=800,
-        title_text="🎯 Comparaison des Stratégies d'Optimisation Fiscale",
-        title_x=0.5,
-        title_font_size=18,
-        showlegend=True,
-        hovermode='closest'
-    )
-    
-    # Formatage des axes
-    fig.update_xaxes(title_text="Rémunération de gérance (€)", tickformat=",", row=1, col=1)
-    fig.update_xaxes(title_text="Stratégies", tickangle=45, row=1, col=2)
-    fig.update_xaxes(title_text="Rémunération de gérance (€)", tickformat=",", row=2, col=1)
-    fig.update_xaxes(title_text="Rémunération de gérance (€)", tickformat=",", row=2, col=2)
-    
-    fig.update_yaxes(title_text="Total net perçu (€)", tickformat=",", row=1, col=1)
-    fig.update_yaxes(title_text="Gain net optimal (€)", tickformat=",", row=1, col=2)
-    fig.update_yaxes(title_text="Économies d'impôt (€)", tickformat=",", row=2, col=1)
-    fig.update_yaxes(title_text="Taux de prélèvement (%)", row=2, col=2)
-    
-    return fig
 
 def create_optimization_chart(scenarios):
     """Crée le graphique d'optimisation détaillée"""
@@ -488,8 +347,8 @@ def create_optimization_chart(scenarios):
     fig = sp.make_subplots(
         rows=2, cols=2,
         subplot_titles=('Optimisation du revenu net total', 
-                      'Taux de prélèvement global',
                       'Composition des prélèvements',
+                      'Taux de prélèvement global',
                       ''),
         specs=[[{"secondary_y": False}, {"secondary_y": False}],
                [{"secondary_y": False}, {"secondary_y": False}]]
@@ -530,21 +389,7 @@ def create_optimization_chart(scenarios):
             row=1, col=1
         )
     
-    # Graphique 2 : Taux de prélèvement
-    fig.add_trace(
-        go.Scatter(
-            x=remunerations, 
-            y=taux_prelevements,
-            mode='lines',
-            name='Taux prélèvement',
-            line=dict(color='red', width=3),
-            hovertemplate='<b>Rémunération:</b> %{x:,.0f}€<br>' +
-                         '<b>Taux prélèvement:</b> %{y:.1f}%<extra></extra>'
-        ),
-        row=1, col=2
-    )
-    
-    # Graphique 3 : Composition des prélèvements (déplacé en position 2,1)
+    # Graphique 2 : Composition des prélèvements
     fig.add_trace(
         go.Scatter(
             x=remunerations, 
@@ -556,7 +401,7 @@ def create_optimization_chart(scenarios):
             hovertemplate='<b>Rémunération:</b> %{x:,.0f}€<br>' +
                          '<b>Cotisations TNS:</b> %{y:,.0f}€<extra></extra>'
         ),
-        row=2, col=1
+        row=1, col=2
     )
     
     fig.add_trace(
@@ -571,7 +416,7 @@ def create_optimization_chart(scenarios):
                          '<b>IR:</b> %{customdata:,.0f}€<extra></extra>',
             customdata=ir
         ),
-        row=2, col=1
+        row=1, col=2
     )
     
     fig.add_trace(
@@ -586,7 +431,7 @@ def create_optimization_chart(scenarios):
                          '<b>IS SARL:</b> %{customdata:,.0f}€<extra></extra>',
             customdata=is_sarl
         ),
-        row=2, col=1
+        row=1, col=2
     )
     
     fig.add_trace(
@@ -600,6 +445,20 @@ def create_optimization_chart(scenarios):
             hovertemplate='<b>Rémunération:</b> %{x:,.0f}€<br>' +
                          '<b>Flat tax:</b> %{customdata:,.0f}€<extra></extra>',
             customdata=flat_tax
+        ),
+        row=1, col=2
+    )
+    
+    # Graphique 3 : Taux de prélèvement
+    fig.add_trace(
+        go.Scatter(
+            x=remunerations, 
+            y=taux_prelevements,
+            mode='lines',
+            name='Taux prélèvement',
+            line=dict(color='red', width=3),
+            hovertemplate='<b>Rémunération:</b> %{x:,.0f}€<br>' +
+                         '<b>Taux prélèvement:</b> %{y:.1f}%<extra></extra>'
         ),
         row=2, col=1
     )
@@ -622,41 +481,11 @@ def create_optimization_chart(scenarios):
     
     # Titre des axes Y
     fig.update_yaxes(title_text="Total net perçu (€)", tickformat=",", row=1, col=1)
-    fig.update_yaxes(title_text="Taux (%)", row=1, col=2)
-    fig.update_yaxes(title_text="Prélèvements cumulés (€)", tickformat=",", row=2, col=1)
+    fig.update_yaxes(title_text="Prélèvements cumulés (€)", tickformat=",", row=1, col=2)
+    fig.update_yaxes(title_text="Taux (%)", row=2, col=1)
     
     return fig
 
-def create_strategy_table(tous_scenarios):
-    """Crée un tableau de synthèse des stratégies"""
-    data = []
-    for i, strategie in enumerate(tous_scenarios):
-        opt = strategie['optimisations']
-        meilleur = strategie['meilleur']
-        
-        data.append({
-            'Stratégie': f"PER: {opt['per']:,}€ | Madelin: {opt['madelin']:,}€ | Girardin: {opt['girardin']:,}€",
-            'Gain Net (€)': f"{meilleur['total_net']:,.0f}",
-            'Rémunération Optimale (€)': f"{meilleur['remuneration_brute']:,.0f}",
-            'Économies IR (€)': f"{meilleur['optimisations']['economies_ir']:,.0f}",
-            'Taux Prélèvement (%)': f"{meilleur['taux_prelevement_global']:.1f}"
-        })
-    
-    import pandas as pd
-    df = pd.DataFrame(data)
-    
-    # Identifier la meilleure stratégie
-    gains = [float(d['Gain Net (€)'].replace(',', '')) for d in data]
-    meilleur_idx = gains.index(max(gains))
-    
-    st.dataframe(
-        df,
-        use_container_width=True,
-        hide_index=True
-    )
-    
-    st.success(f"🏆 **Meilleure stratégie :** {data[meilleur_idx]['Stratégie']}")
-    st.info(f"💰 **Gain supplémentaire vs sans optimisation :** +{max(gains) - min(gains):,.0f}€")
 
 if __name__ == "__main__":
     main()
