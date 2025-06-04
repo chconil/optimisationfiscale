@@ -367,15 +367,18 @@ class OptimisationRemunerationSARL:
         
     def graphique_optimisation(self, scenarios):
         """Crée des graphiques interactifs avec Plotly"""
-        remunerations = [s['remuneration_brute'] for s in scenarios]
-        totaux_nets = [s['total_net'] for s in scenarios]
-        taux_prelevements = [s['taux_prelevement_global'] for s in scenarios]
-        remunerations_nettes = [s['remuneration_nette_apres_ir'] for s in scenarios]
-        dividendes_nets = [s['dividendes_nets'] for s in scenarios]
-        cotisations = [s['cotisations_tns'] for s in scenarios]
-        ir = [s['ir_remuneration'] for s in scenarios]
-        is_sarl = [s['is_sarl'] for s in scenarios]
-        flat_tax = [s['flat_tax'] for s in scenarios]
+        # Filtrer les scénarios où les dividendes sont positifs
+        scenarios_valides = [s for s in scenarios if s['dividendes_nets'] >= 0]
+        
+        remunerations = [s['remuneration_brute'] for s in scenarios_valides]
+        totaux_nets = [s['total_net'] for s in scenarios_valides]
+        taux_prelevements = [s['taux_prelevement_global'] for s in scenarios_valides]
+        remunerations_nettes = [s['remuneration_nette_apres_ir'] for s in scenarios_valides]
+        dividendes_nets = [s['dividendes_nets'] for s in scenarios_valides]
+        cotisations = [s['cotisations_tns'] for s in scenarios_valides]
+        ir = [s['ir_remuneration'] for s in scenarios_valides]
+        is_sarl = [s['is_sarl'] for s in scenarios_valides]
+        flat_tax = [s['flat_tax'] for s in scenarios_valides]
         
         # Créer des sous-graphiques
         fig = sp.make_subplots(
@@ -389,7 +392,10 @@ class OptimisationRemunerationSARL:
         )
         
         # Graphique 1 : Total net avec optimum marqué
-        max_idx = totaux_nets.index(max(totaux_nets))
+        if totaux_nets:  # Vérifier qu'il y a des données
+            max_idx = totaux_nets.index(max(totaux_nets))
+        else:
+            max_idx = 0
         
         fig.add_trace(
             go.Scatter(
@@ -405,19 +411,20 @@ class OptimisationRemunerationSARL:
         )
         
         # Marquer l'optimum
-        fig.add_trace(
-            go.Scatter(
-                x=[remunerations[max_idx]], 
-                y=[totaux_nets[max_idx]],
-                mode='markers',
-                marker=dict(color='red', size=15, symbol='star'),
-                name='Optimum',
-                hovertemplate='<b>🎯 OPTIMUM</b><br>' +
-                             '<b>Rémunération:</b> %{x:,.0f}€<br>' +
-                             '<b>Total net:</b> %{y:,.0f}€<extra></extra>'
-            ),
-            row=1, col=1
-        )
+        if totaux_nets:  # Seulement si on a des données
+            fig.add_trace(
+                go.Scatter(
+                    x=[remunerations[max_idx]], 
+                    y=[totaux_nets[max_idx]],
+                    mode='markers',
+                    marker=dict(color='red', size=15, symbol='star'),
+                    name='Optimum',
+                    hovertemplate='<b>🎯 OPTIMUM</b><br>' +
+                                 '<b>Rémunération:</b> %{x:,.0f}€<br>' +
+                                 '<b>Total net:</b> %{y:,.0f}€<extra></extra>'
+                ),
+                row=1, col=1
+            )
         
         # Graphique 2 : Taux de prélèvement
         fig.add_trace(
@@ -567,15 +574,18 @@ class OptimisationRemunerationSARL:
             scenarios = strategie['scenarios']
             optimisations = strategie['optimisations']
             
+            # Filtrer les scénarios où les dividendes sont positifs
+            scenarios_valides = [s for s in scenarios if s['dividendes_nets'] >= 0]
+            
             # Nom de la stratégie
             nom = f"PER:{optimisations['per']:,} | Mad:{optimisations['madelin']:,} | Gir:{optimisations['girardin']:,}"
             noms_strategies.append(nom)
             meilleurs_par_strategie.append(strategie['meilleur'])
             
-            remunerations = [s['remuneration_brute'] for s in scenarios]
-            totaux_nets = [s['total_net'] for s in scenarios]
-            taux_prelevements = [s['taux_prelevement_global'] for s in scenarios]
-            economies = [s['optimisations']['economies_ir'] for s in scenarios]
+            remunerations = [s['remuneration_brute'] for s in scenarios_valides]
+            totaux_nets = [s['total_net'] for s in scenarios_valides]
+            taux_prelevements = [s['taux_prelevement_global'] for s in scenarios_valides]
+            economies = [s['optimisations']['economies_ir'] for s in scenarios_valides]
             
             couleur = couleurs[i % len(couleurs)]
             
