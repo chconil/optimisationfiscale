@@ -31,9 +31,34 @@ def analyser_couts_reels(resultat_avant_remuneration=250000, max_montant=200000,
     
     for montant_net_cible in range(pas, max_montant + 1, pas):
         
+        # === CALCUL PRÉLIMINAIRE POUR CONNAÎTRE L'IR ===
+        # On fait d'abord un calcul rapide pour connaître l'IR correspondant au net ciblé
+        remuneration_brute_estimee_preliminaire = montant_net_cible * 1.8
+        optimiseur_temp = OptimisationRemunerationSARL(
+            resultat_avant_remuneration=250000,  # Valeur temporaire
+            charges_existantes=0,
+            parts_fiscales=1
+        )
+        
+        # Ajustement itératif pour trouver l'IR correspondant au net ciblé
+        for tentative in range(10):
+            scenario_temp = optimiseur_temp.calculer_scenario(remuneration_brute_estimee_preliminaire)
+            ecart = scenario_temp['remuneration_nette_apres_ir'] - montant_net_cible
+            
+            if abs(ecart) < 50:
+                break
+                
+            if ecart > 0:
+                remuneration_brute_estimee_preliminaire *= 0.98
+            else:
+                remuneration_brute_estimee_preliminaire *= 1.02
+        
+        ir_reel_pour_ce_net = scenario_temp['ir_remuneration']
+        
         # === ADAPTATION DU CA SI DEMANDÉ ===
         if ca_variable:
-            resultat_adapte = montant_net_cible * 1.4
+            # CA adapté = (Net ciblé + IR réel) * 1.4
+            resultat_adapte = (montant_net_cible + ir_reel_pour_ce_net) * 1.4
             optimiseur = OptimisationRemunerationSARL(
                 resultat_avant_remuneration=resultat_adapte,
                 charges_existantes=0,
@@ -62,8 +87,8 @@ def analyser_couts_reels(resultat_avant_remuneration=250000, max_montant=200000,
         
         # Coût réel de la rémunération pour l'entreprise
         if ca_variable:
-            # En CA variable, le coût = le CA nécessaire pour avoir le net ciblé
-            cout_remuneration = resultat_adapte  # = montant_net_cible * 1.4
+            # En CA variable, le coût = (net + IR) × 1.4
+            cout_remuneration = (montant_net_cible + ir_reel_pour_ce_net) * 1.4
             is_sur_reste = 0  # Pas d'IS, tout va en rémunération
         else:
             # En CA fixe, coût = charges salariales + IS sur résultat résiduel
@@ -121,8 +146,8 @@ def analyser_couts_reels(resultat_avant_remuneration=250000, max_montant=200000,
         diff_cout = cout_dividendes - cout_remuneration
         meilleur = "REMUNERATION" if cout_remuneration < cout_dividendes else "DIVIDENDES"
         
-        # IR réel payé pour ce niveau de net
-        ir_reel = scenario_rem['ir_remuneration']
+        # IR réel payé pour ce niveau de net (utiliser le calcul préliminaire)
+        ir_reel = ir_reel_pour_ce_net
         
         donnees.append({
             'montant_net': montant_net_cible,
