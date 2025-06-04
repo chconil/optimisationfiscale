@@ -150,7 +150,7 @@ class OptimisationRemunerationSARL:
         resultats['remuneration_brute'] = remuneration_gerance
         resultats['cotisations_tns'] = cotisations_tns
         resultats['cotisations_detail'] = detail_cotisations
-        resultats['remuneration_nette_avant_ir'] = remuneration_gerance - cotisations_tns
+        resultats['remuneration_nette_avant_ir'] = remuneration_gerance
         
         # 2. Calcul du revenu imposable (après abattement 10%)
         abattement = min(resultats['remuneration_nette_avant_ir'] * self.abattement_frais_pro, 
@@ -196,7 +196,7 @@ class OptimisationRemunerationSARL:
         }
         
         # 5. Calcul du résultat après rémunération
-        resultat_apres_remuneration = self.resultat_avant_remuneration - remuneration_gerance - cotisations_tns
+        resultat_apres_remuneration = self.resultat_avant_remuneration - remuneration_gerance - cotisations_tns - cotisations_tns
         resultats['resultat_apres_remuneration'] = resultat_apres_remuneration
         
         # 6. Calcul de l'IS
