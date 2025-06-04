@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import plotly.subplots as sp
 from plotly.offline import plot
-import webbrowser
 
 class OptimisationRemunerationSARL:
     def __init__(self, resultat_avant_remuneration=300000, charges_existantes=50000, parts_fiscales=1):
@@ -542,8 +541,8 @@ class OptimisationRemunerationSARL:
         fig.update_yaxes(title_text="Montant net (€)", tickformat=",", row=2, col=1)
         fig.update_yaxes(title_text="Prélèvements cumulés (€)", tickformat=",", row=2, col=2)
         
-        # Sauvegarder et ouvrir
-        plot(fig, filename='optimisation_fiscale.html', auto_open=True)
+        # Retourner la figure (sans ouvrir automatiquement pour Streamlit)
+        # plot(fig, filename='optimisation_fiscale.html', auto_open=True)
         return fig
     
     def graphique_comparaison_optimisations(self, tous_scenarios):
@@ -686,7 +685,7 @@ class OptimisationRemunerationSARL:
             row=1, col=2
         )
         
-        plot(fig, filename='comparaison_optimisations.html', auto_open=True)
+        # plot(fig, filename='comparaison_optimisations.html', auto_open=True)
         
         # Tableau de synthèse
         print("\n" + "="*80)
@@ -758,66 +757,26 @@ class OptimisationRemunerationSARL:
                 'pas': 2500
             }
 
-# Utilisation du programme
+# Utilisation du programme en CLI (désactivée pour Streamlit)
 if __name__ == "__main__":
     print("🎯 OPTIMISATION FISCALE AVANCÉE SARL + HOLDING")
     print("=" * 60)
+    print("💡 Pour utiliser l'interface graphique, lancez : streamlit run app.py")
+    print("💡 Pour utiliser en CLI, décommentez le code ci-dessous")
     
-    # Initialisation avec tes paramètres
-    optimiseur = OptimisationRemunerationSARL(
-        resultat_avant_remuneration=300000,
-        charges_existantes=50000,
-        parts_fiscales=1  # Modifie selon ta situation familiale
-    )
-    
-    # Configuration interactive (optionnelle - presser Entrée pour valeurs par défaut)
-    print("💡 Configuration rapide (presser Entrée pour valeurs par défaut)")
-    config = optimiseur.interface_configuration()
-    
-    print(f"\n🔍 Recherche de l'optimisation avec niches fiscales...")
-    print(f"   • PER max: {config['per_max']:,.0f}€")
-    print(f"   • Madelin max: {config['madelin_max']:,.0f}€")
-    print(f"   • Girardin max: {config['girardin_max']:,.0f}€")
-    print(f"   • Pas de calcul: {config['pas']:,.0f}€")
-    
-    # Optimisation complète avec toutes les niches fiscales
-    meilleur_avec_niches, tous_scenarios_niches = optimiseur.optimiser_avec_niches(
-        pas=config['pas'],
-        per_max=config['per_max'],
-        madelin_max=config['madelin_max'],
-        girardin_max=config['girardin_max']
-    )
-    
-    # Affichage du meilleur résultat
-    print("\n🏆 MEILLEURE STRATÉGIE TROUVÉE :")
-    optimiseur.afficher_resultat(meilleur_avec_niches)
-    
-    # Graphique de comparaison des optimisations
-    print("\n📊 Génération des graphiques de comparaison...")
-    optimiseur.graphique_comparaison_optimisations(tous_scenarios_niches)
-    
-    # Optimisation classique pour comparaison
-    print("\n📈 Génération du graphique d'optimisation détaillé...")
-    meilleur_classique, scenarios_classiques = optimiseur.optimiser(pas=2500)
-    optimiseur.graphique_optimisation(scenarios_classiques)
-    
-    # Comparaison directe
-    print("\n" + "="*80)
-    print("📊 COMPARAISON : AVEC vs SANS OPTIMISATIONS FISCALES")
-    print("="*80)
-    print(f"💰 SANS optimisations fiscales  : {meilleur_classique['total_net']:>12,.0f}€")
-    print(f"🎯 AVEC optimisations fiscales  : {meilleur_avec_niches['total_net']:>12,.0f}€")
-    print(f"🚀 GAIN NET SUPPLÉMENTAIRE      : +{meilleur_avec_niches['total_net'] - meilleur_classique['total_net']:>11,.0f}€")
-    print(f"📈 AMÉLIORATION                 : +{((meilleur_avec_niches['total_net'] / meilleur_classique['total_net']) - 1) * 100:>11.1f}%")
-    
-    # Détail des optimisations de la meilleure stratégie
-    if 'optimisations' in meilleur_avec_niches:
-        opt = meilleur_avec_niches['optimisations']
-        print(f"\n🔧 OPTIMISATIONS UTILISÉES DANS LA MEILLEURE STRATÉGIE :")
-        print(f"   • PER                         : {opt['per']:>12,.0f}€")
-        print(f"   • Madelin TNS                 : {opt['madelin']:>12,.0f}€") 
-        print(f"   • Girardin                    : {opt['girardin']:>12,.0f}€")
-        print(f"   • Économies d'impôt totales   : {opt['economies_ir']:>12,.0f}€")
-    
-    print("\n🎉 Analyse terminée ! Les graphiques interactifs s'ouvrent dans votre navigateur.")
-    print("💡 Passez la souris sur les graphiques pour voir les détails !")
+    # # Configuration par défaut pour test rapide
+    # optimiseur = OptimisationRemunerationSARL(
+    #     resultat_avant_remuneration=300000,
+    #     charges_existantes=50000,
+    #     parts_fiscales=1
+    # )
+    # 
+    # # Test rapide avec paramètres par défaut
+    # meilleur_avec_niches, tous_scenarios_niches = optimiseur.optimiser_avec_niches(
+    #     pas=5000,
+    #     per_max=32419,
+    #     madelin_max=84000,
+    #     girardin_max=50000
+    # )
+    # 
+    # optimiseur.afficher_resultat(meilleur_avec_niches)
