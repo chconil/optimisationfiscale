@@ -175,8 +175,9 @@ class OptimisationRemunerationSARL:
         # 4. Calcul de l'IR sur la rémunération
         ir_remuneration, detail_ir = self.calculer_ir(revenu_imposable_final)
         
-        # Girardin : réduction d'impôt
-        reduction_girardin = min(girardin_montant, ir_remuneration)
+        # Girardin : réduction d'impôt (110% de l'investissement)
+        reduction_girardin_brute = girardin_montant * self.taux_girardin_industriel
+        reduction_girardin = min(reduction_girardin_brute, ir_remuneration)
         ir_final = ir_remuneration - reduction_girardin
         
         resultats['ir_avant_girardin'] = ir_remuneration
@@ -190,7 +191,8 @@ class OptimisationRemunerationSARL:
             'per': per_montant,
             'madelin': madelin_montant, 
             'girardin': girardin_montant,
-            'economies_ir': per_deduction * 0.30 + madelin_deduction * 0.30 + reduction_girardin
+            'economies_ir': per_deduction * 0.30 + madelin_deduction * 0.30 + reduction_girardin,
+            'gain_net_girardin': reduction_girardin - girardin_montant
         }
         
         # 5. Calcul du résultat après rémunération
@@ -222,8 +224,10 @@ class OptimisationRemunerationSARL:
         resultats['flat_tax'] = flat_tax
         resultats['dividendes_nets'] = dividendes_nets
         
-        # 10. Total net perçu
-        resultats['total_net'] = resultats['remuneration_nette_apres_ir'] + dividendes_nets
+        # 10. Total net perçu (en déduisant l'investissement Girardin)
+        # Si les dividendes sont négatifs, on ne peut pas les distribuer
+        dividendes_distribuables = max(0, dividendes_nets)
+        resultats['total_net'] = resultats['remuneration_nette_apres_ir'] + dividendes_distribuables - girardin_montant
         
         # 11. Taux de prélèvement global
         total_prelevements = (self.resultat_avant_remuneration - resultats['total_net'])
@@ -232,22 +236,29 @@ class OptimisationRemunerationSARL:
         return resultats
     
     def optimiser(self, pas=5000, min_salaire=0, max_salaire=None):
-        """Trouve la rémunération optimale sans optimisations fiscales"""
+        """Trouve la rémunération optimale sans optimisations fiscales avec recherche en 2 phases"""
         if max_salaire is None:
             max_salaire = self.resultat_avant_remuneration
         
-        meilleur_scenario = None
-        meilleur_net = 0
+        # Phase 1: Recherche exhaustive 
+        scenarios_grossiers = []
         
-        scenarios = []
-        
-        for remuneration in range(min_salaire, max_salaire + 1, pas):
+        # Recherche fine sur TOUT le range (pas de 500€)
+        pas_fin_global = 500
+        for remuneration in range(min_salaire, max_salaire + 1, pas_fin_global):
             scenario = self.calculer_scenario(remuneration)
-            scenarios.append(scenario)
-            
-            if scenario['total_net'] > meilleur_net:
-                meilleur_net = scenario['total_net']
-                meilleur_scenario = scenario
+            scenarios_grossiers.append(scenario)
+        
+        # Trouver le meilleur de la phase grossière
+        meilleur_grossier = max(scenarios_grossiers, key=lambda x: x['total_net'])
+        remuneration_optimale_approx = meilleur_grossier['remuneration_brute']
+        
+        # Avec recherche exhaustive, pas besoin de phase 2
+        scenarios = scenarios_grossiers
+        scenarios.sort(key=lambda x: x['remuneration_brute'])
+        
+        # Trouver le meilleur final
+        meilleur_scenario = max(scenarios, key=lambda x: x['total_net'])
         
         return meilleur_scenario, scenarios
     
@@ -280,16 +291,27 @@ class OptimisationRemunerationSARL:
         
         for optimisations in optimisations_a_tester:
             scenarios_optim = []
-            for remuneration in range(min_salaire, max_salaire + 1, pas):
-                scenario = self.calculer_scenario(
-                    remuneration, 
-                    per_montant=optimisations['per'],
-                    madelin_montant=optimisations['madelin'],
-                    girardin_montant=optimisations['girardin']
+            
+            # Si Girardin est utilisé, ajuster la stratégie d'optimisation
+            if optimisations['girardin'] > 0:
+                # Stratégie spéciale pour Girardin : chercher à maximiser l'IR pour utiliser la réduction
+                scenarios_optim = self._optimiser_avec_girardin(
+                    optimisations, min_salaire, max_salaire, pas
                 )
-                scenario['nom_strategie'] = f"PER:{optimisations['per']:,}€ | Madelin:{optimisations['madelin']:,}€ | Girardin:{optimisations['girardin']:,}€"
-                scenarios_optim.append(scenario)
-                
+            else:
+                # Optimisation classique pour les autres cas
+                for remuneration in range(min_salaire, max_salaire + 1, pas):
+                    scenario = self.calculer_scenario(
+                        remuneration, 
+                        per_montant=optimisations['per'],
+                        madelin_montant=optimisations['madelin'],
+                        girardin_montant=optimisations['girardin']
+                    )
+                    scenario['nom_strategie'] = f"PER:{optimisations['per']:,}€ | Madelin:{optimisations['madelin']:,}€ | Girardin:{optimisations['girardin']:,}€"
+                    scenarios_optim.append(scenario)
+            
+            # Mise à jour du meilleur scénario global
+            for scenario in scenarios_optim:
                 if scenario['total_net'] > meilleur_net:
                     meilleur_net = scenario['total_net']
                     meilleur_scenario = scenario
@@ -301,6 +323,61 @@ class OptimisationRemunerationSARL:
             })
         
         return meilleur_scenario, tous_scenarios
+    
+    def _optimiser_avec_girardin(self, optimisations, min_salaire, max_salaire, pas):
+        """Optimisation spéciale pour Girardin : cherche la rémunération qui maximise l'usage de la réduction"""
+        scenarios = []
+        girardin_montant = optimisations['girardin']
+        reduction_theorique = girardin_montant * self.taux_girardin_industriel
+        
+        # Phase 1: Recherche grossière pour trouver la zone optimale
+        scenarios_grossiers = []
+        pas_grossier = max(pas * 4, 10000)  # Pas plus large pour recherche initiale
+        
+        for remuneration in range(min_salaire, max_salaire + 1, pas_grossier):
+            scenario = self.calculer_scenario(
+                remuneration,
+                per_montant=optimisations['per'],
+                madelin_montant=optimisations['madelin'],
+                girardin_montant=girardin_montant
+            )
+            scenario['nom_strategie'] = f"PER:{optimisations['per']:,}€ | Madelin:{optimisations['madelin']:,}€ | Girardin:{optimisations['girardin']:,}€"
+            scenarios_grossiers.append(scenario)
+        
+        # Trouver la rémunération qui utilise le mieux Girardin
+        # Critère : maximiser la réduction Girardin utilisée tout en optimisant le total net
+        meilleur_grossier = max(scenarios_grossiers, key=lambda x: x['total_net'])
+        remuneration_optimale_approx = meilleur_grossier['remuneration_brute']
+        
+        # Phase 2: Recherche fine autour de la zone optimale
+        zone_min = max(min_salaire, remuneration_optimale_approx - pas_grossier)
+        zone_max = min(max_salaire, remuneration_optimale_approx + pas_grossier)
+        
+        for remuneration in range(zone_min, zone_max + 1, pas):
+            scenario = self.calculer_scenario(
+                remuneration,
+                per_montant=optimisations['per'],
+                madelin_montant=optimisations['madelin'],
+                girardin_montant=girardin_montant
+            )
+            scenario['nom_strategie'] = f"PER:{optimisations['per']:,}€ | Madelin:{optimisations['madelin']:,}€ | Girardin:{optimisations['girardin']:,}€"
+            
+            # Ajouter des métriques d'efficacité Girardin
+            scenario['efficacite_girardin'] = scenario['reduction_girardin'] / reduction_theorique if reduction_theorique > 0 else 0
+            scenario['ir_genere'] = scenario['ir_avant_girardin']
+            
+            scenarios.append(scenario)
+        
+        # Si on n'a pas assez de scenarios (zone trop petite), ajouter tous les scenarios grossiers
+        if len(scenarios) < 10:
+            scenarios.extend(scenarios_grossiers)
+            # Supprimer les doublons basés sur la rémunération
+            scenarios_uniques = {}
+            for s in scenarios:
+                scenarios_uniques[s['remuneration_brute']] = s
+            scenarios = list(scenarios_uniques.values())
+        
+        return scenarios
     
     def afficher_resultat(self, resultat):
         """Affiche les résultats de manière formatée"""
@@ -367,8 +444,8 @@ class OptimisationRemunerationSARL:
         
     def graphique_optimisation(self, scenarios):
         """Crée des graphiques interactifs avec Plotly"""
-        # Filtrer les scénarios où les dividendes sont positifs
-        scenarios_valides = [s for s in scenarios if s['dividendes_nets'] >= 0]
+        # Utiliser tous les scénarios (dividendes négatifs désormais gérés correctement)
+        scenarios_valides = scenarios
         
         remunerations = [s['remuneration_brute'] for s in scenarios_valides]
         totaux_nets = [s['total_net'] for s in scenarios_valides]
@@ -574,8 +651,8 @@ class OptimisationRemunerationSARL:
             scenarios = strategie['scenarios']
             optimisations = strategie['optimisations']
             
-            # Filtrer les scénarios où les dividendes sont positifs
-            scenarios_valides = [s for s in scenarios if s['dividendes_nets'] >= 0]
+            # Utiliser tous les scénarios (dividendes négatifs désormais gérés correctement)
+            scenarios_valides = scenarios
             
             # Nom de la stratégie
             nom = f"PER:{optimisations['per']:,} | Mad:{optimisations['madelin']:,} | Gir:{optimisations['girardin']:,}"

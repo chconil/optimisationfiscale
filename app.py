@@ -126,12 +126,29 @@ def main():
             )
             
             # Optimisation avec niches fiscales
-            meilleur_avec_niches, tous_scenarios_niches = optimiseur.optimiser_avec_niches(
+            meilleur_global, tous_scenarios_niches = optimiseur.optimiser_avec_niches(
                 pas=pas_calcul,
                 per_max=per_max if use_per else 0,
                 madelin_max=madelin_max if use_madelin else 0,
                 girardin_max=girardin_max if use_girardin else 0
             )
+            
+            # Forcer l'utilisation des optimisations cochées par l'utilisateur
+            meilleur_avec_niches = None
+            for strategie in tous_scenarios_niches:
+                opt = strategie['optimisations']
+                # Vérifier si cette stratégie correspond aux choix de l'utilisateur
+                per_match = (opt['per'] > 0) == use_per
+                madelin_match = (opt['madelin'] > 0) == use_madelin  
+                girardin_match = (opt['girardin'] > 0) == use_girardin
+                
+                if per_match and madelin_match and girardin_match:
+                    if meilleur_avec_niches is None or strategie['meilleur']['total_net'] > meilleur_avec_niches['total_net']:
+                        meilleur_avec_niches = strategie['meilleur']
+            
+            # Si aucune stratégie ne correspond, utiliser la meilleure globale
+            if meilleur_avec_niches is None:
+                meilleur_avec_niches = meilleur_global
             
             # Optimisation classique pour comparaison
             meilleur_classique, scenarios_classiques = optimiseur.optimiser(pas=pas_calcul)
@@ -243,6 +260,8 @@ def main():
             **IR final :** {meilleur_avec_niches['ir_remuneration']:,.0f}€  
             
             **💰 Salaire net après IR :** {meilleur_avec_niches['remuneration_nette_apres_ir']:,.0f}€
+            
+            **🏭 INVESTISSEMENT GIRARDIN :** -{meilleur_avec_niches['optimisations']['girardin']:,.0f}€
             """)
         
         with col_resume3:
@@ -344,8 +363,8 @@ def create_comparison_chart(tous_scenarios):
         scenarios = strategie['scenarios']
         optimisations = strategie['optimisations']
         
-        # Filtrer les scénarios où les dividendes sont positifs
-        scenarios_valides = [s for s in scenarios if s['dividendes_nets'] >= 0]
+        # Utiliser tous les scénarios (dividendes négatifs désormais gérés correctement)
+        scenarios_valides = scenarios
         
         # Nom de la stratégie
         nom = f"PER:{optimisations['per']:,} | Mad:{optimisations['madelin']:,} | Gir:{optimisations['girardin']:,}"
@@ -452,8 +471,8 @@ def create_comparison_chart(tous_scenarios):
 
 def create_optimization_chart(scenarios):
     """Crée le graphique d'optimisation détaillée"""
-    # Filtrer les scénarios où les dividendes sont positifs
-    scenarios_valides = [s for s in scenarios if s['dividendes_nets'] >= 0]
+    # Utiliser tous les scénarios (dividendes négatifs désormais gérés correctement)
+    scenarios_valides = scenarios
     
     remunerations = [s['remuneration_brute'] for s in scenarios_valides]
     totaux_nets = [s['total_net'] for s in scenarios_valides]
