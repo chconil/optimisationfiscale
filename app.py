@@ -1,5 +1,6 @@
 import streamlit as st
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 import plotly.subplots as sp
 from calculs import OptimisationRemunerationSARL
@@ -40,8 +41,8 @@ def main():
         parts_fiscales = st.number_input(
             "Nombre de parts fiscales",
             min_value=1.0,
-            value=1.0,
-            step=0.5,
+            value=2.0,
+            step=0.25,
             help="Votre nombre de parts fiscales pour le calcul de l'IR"
         )
         
@@ -58,10 +59,10 @@ def main():
         per_max = 0
         if use_per:
             per_max = st.slider(
-                "Montant PER maximum (€)",
+                "Montant PER (€)",
                 min_value=0,
-                max_value=50000,
-                value=32419,
+                max_value=30000,
+                value=15000,
                 step=1000,
                 help="Plafond légal : 8 x PASS = 32,419€ en 2024"
             )
@@ -69,17 +70,17 @@ def main():
         # Madelin
         use_madelin = st.checkbox(
             "🏥 Contrat Madelin TNS",
-            help="Déduction fiscale complémentaire pour les TNS (max 84,000€ en 2024)"
+            help="Charge déductible de la SARL pour les TNS (max 84,000€ en 2024)"
         )
         madelin_max = 0
         if use_madelin:
             madelin_max = st.slider(
-                "Montant Madelin maximum (€)",
+                "Montant Madelin (€)",
                 min_value=0,
-                max_value=100000,
-                value=84000,
-                step=5000,
-                help="Plafond légal pour les contrats Madelin TNS"
+                max_value=35000,
+                value=5000,
+                step=500,
+                help="Plafond légal pour les charges Madelin TNS déductibles de la SARL"
             )
         
         # Girardin
@@ -89,7 +90,6 @@ def main():
         )
         girardin_max = 0
         if use_girardin:
-            st.warning("⚠️ Le Girardin Industriel nécessite un INVESTISSEMENT réel. C'est une dépense qui génère une réduction d'impôt.")
             girardin_max = st.slider(
                 "Montant d'investissement Girardin (€)",
                 min_value=0,
@@ -104,7 +104,7 @@ def main():
         pas_calcul = st.selectbox(
             "Précision du calcul",
             options=[1000, 2500, 5000, 10000],
-            index=1,
+            index=0,
             help="Plus le pas est petit, plus le calcul est précis mais plus long"
         )
         
@@ -195,7 +195,7 @@ def main():
                 )
             with col_b:
                 st.metric(
-                    "📉 Taux Prélèvement",
+                    "📉 Taux Prélèvement Global",
                     f"{meilleur_avec_niches['taux_prelevement_global']:.1f}%"
                 )
             
@@ -207,12 +207,12 @@ def main():
                     st.info(f"📈 PER : {meilleur_avec_niches['optimisations']['per']:,.0f}€")
                 
                 if meilleur_avec_niches['optimisations']['madelin'] > 0:
-                    st.info(f"🏥 Madelin : {meilleur_avec_niches['optimisations']['madelin']:,.0f}€")
+                    st.info(f"🏥 Madelin (charge SARL) : {meilleur_avec_niches['optimisations']['madelin']:,.0f}€")
                 
                 if meilleur_avec_niches['optimisations']['girardin'] > 0:
-                    st.error(f"🏭 Girardin (DÉPENSE) : {meilleur_avec_niches['optimisations']['girardin']:,.0f}€")
+                    st.error(f"🏭 Girardin : {meilleur_avec_niches['optimisations']['girardin']:,.0f}€")
                 
-                st.success(f"💰 Économies d'impôt totales : {meilleur_avec_niches['optimisations']['economies_ir']:,.0f}€")
+                st.success(f"💰 Économies totales : {meilleur_avec_niches['optimisations']['economies_totales']:,.0f}€")
         
         with col2:
             st.subheader("📊 Répartition du Revenu")
@@ -258,6 +258,7 @@ def main():
             
             **Rémunération brute :** {meilleur_avec_niches['remuneration_brute']:,.0f}€  
             **Cotisations TNS :** {meilleur_avec_niches['cotisations_tns']:,.0f}€  
+            **Charge Madelin :** {meilleur_avec_niches.get('madelin_charge', 0):,.0f}€  
             **Résultat après rémun. :** {meilleur_avec_niches['resultat_apres_remuneration']:,.0f}€  
             
             **IS SARL :** {meilleur_avec_niches['is_sarl']:,.0f}€  
@@ -273,16 +274,17 @@ def main():
             
             **Déductions fiscales :**  
             • PER : {meilleur_avec_niches.get('per_deduction', 0):,.0f}€  
-            • Madelin : {meilleur_avec_niches.get('madelin_deduction', 0):,.0f}€  
             **Revenu imposable final :** {meilleur_avec_niches.get('revenu_imposable_final', meilleur_avec_niches['revenu_imposable']):,.0f}€  
             
             **IR avant Girardin :** {meilleur_avec_niches.get('ir_avant_girardin', meilleur_avec_niches['ir_remuneration']):,.0f}€  
             **Réduction Girardin :** {meilleur_avec_niches.get('reduction_girardin', 0):,.0f}€  
             **IR final :** {meilleur_avec_niches['ir_remuneration']:,.0f}€  
             
-            **💰 Salaire net après IR :** {meilleur_avec_niches['remuneration_nette_apres_ir']:,.0f}€
+            **💰 Salaire net après IR :** {meilleur_avec_niches['remuneration_nette_apres_ir']-meilleur_avec_niches.get('per_deduction', 0):,.0f}€
             
-            **📊 Taux prélèvement personnel :** {(meilleur_avec_niches['cotisations_tns'] + meilleur_avec_niches['ir_remuneration']) / meilleur_avec_niches['remuneration_brute'] * 100:.1f}%
+            **💰 Placement PER :** {meilleur_avec_niches.get('per_deduction', 0):,.0f}€  
+            
+            **📊 Taux prélèvement personnel :** {(1-meilleur_avec_niches['remuneration_nette_apres_ir'] / (meilleur_avec_niches['cotisations_tns'] +  meilleur_avec_niches['remuneration_brute'])) * 100:.1f}%
             
             **🏭 INVESTISSEMENT GIRARDIN :** -{meilleur_avec_niches['optimisations']['girardin']:,.0f}€
             """)
@@ -297,6 +299,7 @@ def main():
             
             **Flat tax (30%) :** {meilleur_avec_niches['flat_tax']:,.0f}€  
             **💎 Dividendes nets :** {meilleur_avec_niches['dividendes_nets']:,.0f}€  
+            **📊 Taux prélèvement dividendes :** {meilleur_avec_niches['taux_prelevement_dividendes']:.1f}%  
             
             **🎯 TOTAL NET PERÇU :** {meilleur_avec_niches['total_net']:,.0f}€  
             **Taux prélèvement global :** {meilleur_avec_niches['taux_prelevement_global']:.1f}%
@@ -317,19 +320,19 @@ def main():
             
             with col_eco2:
                 if meilleur_avec_niches['optimisations']['madelin'] > 0:
-                    economie_madelin = meilleur_avec_niches.get('madelin_deduction', 0) * 0.30  # Estimation 30% d'économie
-                    st.metric("🏥 Madelin", f"{meilleur_avec_niches['optimisations']['madelin']:,.0f}€", f"Économie: {economie_madelin:,.0f}€")
+                    economie_madelin = meilleur_avec_niches.get('economie_is_madelin', 0)  # Économie d'IS
+                    st.metric("🏥 Madelin (charge)", f"{meilleur_avec_niches['optimisations']['madelin']:,.0f}€", f"Économie IS: {economie_madelin:,.0f}€")
                 else:
                     st.metric("🏥 Madelin", "Non utilisé", "0€")
             
             with col_eco3:
                 if meilleur_avec_niches['optimisations']['girardin'] > 0:
-                    st.metric("🏭 Girardin (DÉPENSE)", f"{meilleur_avec_niches['optimisations']['girardin']:,.0f}€", f"Réduction: {meilleur_avec_niches.get('reduction_girardin', 0):,.0f}€")
+                    st.metric("🏭 Girardin", f"{meilleur_avec_niches['optimisations']['girardin']:,.0f}€", f"Réduction: {meilleur_avec_niches.get('reduction_girardin', 0):,.0f}€")
                 else:
                     st.metric("🏭 Girardin", "Non utilisé", "0€")
             
             with col_eco4:
-                st.metric("💰 TOTAL ÉCONOMIES", f"{meilleur_avec_niches['optimisations']['economies_ir']:,.0f}€", f"vs sans optim: +{meilleur_avec_niches['total_net'] - meilleur_classique['total_net']:,.0f}€")
+                st.metric("💰 TOTAL ÉCONOMIES", f"{meilleur_avec_niches['optimisations']['economies_totales']:,.0f}€", f"vs sans optim: +{meilleur_avec_niches['total_net'] - meilleur_classique['total_net']:,.0f}€")
         
         # Comparaison avec/sans optimisations
         st.subheader("⚖️ Comparaison Avec/Sans Optimisations")
@@ -349,6 +352,105 @@ def main():
         st.subheader("📈 Analyse Détaillée")
         fig_opt = create_optimization_chart(scenarios_avec_niches)
         st.plotly_chart(fig_opt, use_container_width=True)
+        
+        # Tableau détaillé des données
+        st.subheader("📋 Tableau Détaillé des Scénarios")
+        df_scenarios = create_scenarios_dataframe(scenarios_avec_niches)
+        
+        # Affichage avec possibilité de filtrer
+        col_filter1, col_filter2 = st.columns(2)
+        with col_filter1:
+            min_remun_filter = st.number_input(
+                "Rémunération minimum à afficher (€)",
+                min_value=0,
+                max_value=int(df_scenarios['Rémunération Brute'].max()) if not df_scenarios.empty else 0,
+                value=0,
+                step=10000
+            )
+        with col_filter2:
+            max_remun_filter = st.number_input(
+                "Rémunération maximum à afficher (€)",
+                min_value=0,
+                max_value=int(df_scenarios['Rémunération Brute'].max()) if not df_scenarios.empty else 300000,
+                value=int(df_scenarios['Rémunération Brute'].max()) if not df_scenarios.empty else 300000,
+                step=10000
+            )
+        
+        # Filtrer le DataFrame
+        df_filtered = df_scenarios[
+            (df_scenarios['Rémunération Brute'] >= min_remun_filter) & 
+            (df_scenarios['Rémunération Brute'] <= max_remun_filter)
+        ]
+        
+        # Mettre en évidence l'optimum
+        if not df_filtered.empty:
+            optimal_idx = df_filtered['Total Net'].idxmax()
+            st.info(f"🎯 **Optimum visible:** Rémunération {df_filtered.loc[optimal_idx, 'Rémunération Brute']:,.0f}€ → Total net {df_filtered.loc[optimal_idx, 'Total Net']:,.0f}€")
+        
+        # Afficher le tableau
+        st.dataframe(
+            df_filtered,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Rémunération Brute": st.column_config.NumberColumn("Rémunération Brute", format="€%.0f"),
+                "Total Net": st.column_config.NumberColumn("Total Net", format="€%.0f"),
+                "Rémunération Nette": st.column_config.NumberColumn("Rémunération Nette", format="€%.0f"),
+                "Dividendes Nets": st.column_config.NumberColumn("Dividendes Nets", format="€%.0f"),
+                "Cotisations TNS": st.column_config.NumberColumn("Cotisations TNS", format="€%.0f"),
+                "IR": st.column_config.NumberColumn("IR", format="€%.0f"),
+                "IS SARL": st.column_config.NumberColumn("IS SARL", format="€%.0f"),
+                "IS Holding": st.column_config.NumberColumn("IS Holding", format="€%.0f"),
+                "Flat Tax": st.column_config.NumberColumn("Flat Tax", format="€%.0f"),
+                "Total Prélèvements": st.column_config.NumberColumn("Total Prélèvements", format="€%.0f"),
+                "Taux Prélèvement (%)": st.column_config.NumberColumn("Taux Prélèvement (%)", format="%.1f%%"),
+                "Vérification": st.column_config.NumberColumn("Vérification", format="€%.0f")
+            }
+        )
+        
+        # Bouton de téléchargement CSV
+        csv = df_scenarios.to_csv(index=False)
+        st.download_button(
+            label="📥 Télécharger les données (CSV)",
+            data=csv,
+            file_name=f"optimisation_fiscale_{resultat_initial}€.csv",
+            mime="text/csv"
+        )
+
+
+def create_scenarios_dataframe(scenarios):
+    """Crée un DataFrame avec tous les scénarios pour affichage en tableau"""
+    data = []
+    
+    for s in scenarios:
+        # Calculs similaires à export_donnees.py
+        total_cotisations = s['cotisations_tns'] + s['ir_remuneration'] + s['is_sarl'] + s['is_holding'] + s['flat_tax']
+        net_disponible = s['remuneration_nette_apres_ir'] + s['dividendes_nets']
+        verification_somme = total_cotisations + net_disponible
+        
+        row = {
+            'Rémunération Brute': s['remuneration_brute'],
+            'Total Net': s['total_net'],
+            'Rémunération Nette': s['remuneration_nette_apres_ir'],
+            'Dividendes Nets': s['dividendes_nets'],
+            'Cotisations TNS': s['cotisations_tns'],
+            'IR': s['ir_remuneration'],
+            'IS SARL': s['is_sarl'],
+            'IS Holding': s['is_holding'],
+            'Flat Tax': s['flat_tax'],
+            'Total Prélèvements': total_cotisations,
+            'Net Disponible': net_disponible,
+            'Vérification': verification_somme,
+            'Taux Prélèvement (%)': s['taux_prelevement_global']
+        }
+        data.append(row)
+    
+    df = pd.DataFrame(data)
+    
+    # Trier par rémunération brute
+    df = df.sort_values('Rémunération Brute').reset_index(drop=True)
+    
+    return df
 
 
 def create_optimization_chart(scenarios):
