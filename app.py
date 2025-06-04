@@ -125,7 +125,7 @@ def main():
                 parts_fiscales=parts_fiscales
             )
             
-            # Optimisation avec niches fiscales
+            # Optimisation (toujours avec la méthode niches, même si montants = 0)
             meilleur_global, tous_scenarios_niches = optimiseur.optimiser_avec_niches(
                 pas=pas_calcul,
                 per_max=per_max if use_per else 0,
@@ -150,8 +150,29 @@ def main():
             if meilleur_avec_niches is None:
                 meilleur_avec_niches = meilleur_global
             
-            # Optimisation classique pour comparaison
-            meilleur_classique, scenarios_classiques = optimiseur.optimiser(pas=pas_calcul)
+            # Récupérer les scénarios de la stratégie choisie pour les graphiques
+            scenarios_avec_niches = None
+            for strategie in tous_scenarios_niches:
+                opt = strategie['optimisations']
+                per_match = (opt['per'] > 0) == use_per
+                madelin_match = (opt['madelin'] > 0) == use_madelin  
+                girardin_match = (opt['girardin'] > 0) == use_girardin
+                
+                if per_match and madelin_match and girardin_match:
+                    scenarios_avec_niches = strategie['scenarios']
+                    break
+            
+            # Fallback si aucune stratégie trouvée
+            if scenarios_avec_niches is None:
+                # Trouver la stratégie du meilleur global
+                for strategie in tous_scenarios_niches:
+                    if strategie['meilleur'] == meilleur_global:
+                        scenarios_avec_niches = strategie['scenarios']
+                        break
+            
+            # Scénario de référence sans optimisations pour comparaison
+            scenario_ref = optimiseur.calculer_scenario(meilleur_avec_niches['remuneration_brute'])
+            meilleur_classique = scenario_ref
         
         # Affichage des résultats
         col1, col2 = st.columns([1, 1])
@@ -261,6 +282,8 @@ def main():
             
             **💰 Salaire net après IR :** {meilleur_avec_niches['remuneration_nette_apres_ir']:,.0f}€
             
+            **📊 Taux prélèvement personnel :** {(meilleur_avec_niches['cotisations_tns'] + meilleur_avec_niches['ir_remuneration']) / meilleur_avec_niches['remuneration_brute'] * 100:.1f}%
+            
             **🏭 INVESTISSEMENT GIRARDIN :** -{meilleur_avec_niches['optimisations']['girardin']:,.0f}€
             """)
         
@@ -324,7 +347,7 @@ def main():
         
         # Graphique d'optimisation unique
         st.subheader("📈 Analyse Détaillée")
-        fig_opt = create_optimization_chart(scenarios_classiques)
+        fig_opt = create_optimization_chart(scenarios_avec_niches)
         st.plotly_chart(fig_opt, use_container_width=True)
 
 
@@ -341,6 +364,7 @@ def create_optimization_chart(scenarios):
     cotisations = [s['cotisations_tns'] for s in scenarios_valides]
     ir = [s['ir_remuneration'] for s in scenarios_valides]
     is_sarl = [s['is_sarl'] for s in scenarios_valides]
+    is_holding = [s['is_holding'] for s in scenarios_valides]
     flat_tax = [s['flat_tax'] for s in scenarios_valides]
     
     # Créer des sous-graphiques (2x2 - 1)
@@ -422,14 +446,14 @@ def create_optimization_chart(scenarios):
     fig.add_trace(
         go.Scatter(
             x=remunerations, 
-            y=[c + i + is_val for c, i, is_val in zip(cotisations, ir, is_sarl)],
+            y=[c + i + is_s + is_h for c, i, is_s, is_h in zip(cotisations, ir, is_sarl, is_holding)],
             mode='lines',
-            name='+ IS',
+            name='+ IS Total',
             fill='tonexty',
             line=dict(color='darkred'),
             hovertemplate='<b>Rémunération:</b> %{x:,.0f}€<br>' +
-                         '<b>IS SARL:</b> %{customdata:,.0f}€<extra></extra>',
-            customdata=is_sarl
+                         '<b>IS Total:</b> %{customdata:,.0f}€<extra></extra>',
+            customdata=[s + h for s, h in zip(is_sarl, is_holding)]
         ),
         row=1, col=2
     )
@@ -437,7 +461,7 @@ def create_optimization_chart(scenarios):
     fig.add_trace(
         go.Scatter(
             x=remunerations, 
-            y=[c + i + is_val + ft for c, i, is_val, ft in zip(cotisations, ir, is_sarl, flat_tax)],
+            y=[c + i + is_s + is_h + ft for c, i, is_s, is_h, ft in zip(cotisations, ir, is_sarl, is_holding, flat_tax)],
             mode='lines',
             name='+ Flat tax',
             fill='tonexty',
