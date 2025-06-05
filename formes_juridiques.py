@@ -414,14 +414,20 @@ class SAS(OptimisationFiscale):
         for optimisations in optimisations_a_tester:
             scenarios_optim = []
             
-            # Test différents niveaux de salaire
-            for salaire in range(0, self.resultat_avant_remuneration, pas):
+            # Pour SAS, calculer le salaire brut maximum possible
+            # Le coût total = salaire_brut * (1 + taux_cotisations_patronales)
+            cout_par_euro_salaire = 1 + TAUX_COTISATIONS_PATRONALES
+            salaire_brut_max = int(self.resultat_avant_remuneration / cout_par_euro_salaire)
+            
+            # Test différents niveaux de salaire (limité par le budget réel)
+            for salaire in range(0, salaire_brut_max + 1, pas):
                 scenario = self.calculer_scenario(
                     salaire,
                     per_montant=optimisations['per'],
                     girardin_montant=optimisations['girardin']
                 )
                 
+                # Vérifier que le coût total ne dépasse pas le budget et que le total net est positif
                 if scenario.get('total_net', 0) > 0:
                     scenarios_optim.append(scenario)
             
