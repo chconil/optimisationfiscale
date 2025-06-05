@@ -187,13 +187,18 @@ def main():
                 delta=f"+{meilleur_avec_niches['total_net'] - meilleur_classique['total_net']:,.0f}€"
             )
             
-            col_a, col_b = st.columns(2)
+            col_a, col_b, col_c = st.columns(3)
             with col_a:
                 st.metric(
                     "💼 Rémunération Optimale",
                     f"{meilleur_avec_niches['remuneration_brute']:,.0f}€"
                 )
             with col_b:
+                st.metric(
+                    "💎 Dividendes",
+                    f"{meilleur_avec_niches['dividendes_nets']:,.0f}€"
+                )
+            with col_c:
                 st.metric(
                     "📉 Taux Prélèvement Global",
                     f"{meilleur_avec_niches['taux_prelevement_global']:.1f}%"
@@ -249,25 +254,60 @@ def main():
         # Colonnes pour l'affichage du résumé
         col_resume1, col_resume2, col_resume3 = st.columns(3)
         
+        # Préparer les détails des cotisations TNS
+        cotisations_detail_str = ""
+        for nom, montant in meilleur_avec_niches['cotisations_detail'].items():
+            nom_affiche = {
+                'maladie': 'Maladie',
+                'allocations_familiales': 'Allocations familiales', 
+                'retraite_base': 'Retraite base',
+                'retraite_complementaire': 'Retraite complémentaire',
+                'invalidite_deces': 'Invalidité décès',
+                'csg_crds': 'CSG/CRDS',
+                'formation': 'Formation'
+            }.get(nom, nom)
+            cotisations_detail_str += f"  • {nom_affiche} : {montant:,.0f}€  \n"
+        
+        # Préparer les détails IS
+        is_detail_str = ""
+        for detail in meilleur_avec_niches['is_detail']:
+            is_detail_str += f"  • {detail['base']:,.0f}€ à {detail['taux']*100:.0f}% = {detail['impot']:,.0f}€  \n"
+        
+        # Préparer les détails IR
+        ir_detail_str = ""
+        for detail in meilleur_avec_niches['ir_detail']:
+            if detail['impot'] > 0:  # Ne montrer que les tranches avec de l'impôt
+                ir_detail_str += f"  • De {detail['de']:,.0f}€ à {detail['a']:,.0f}€ : {detail['taux']*100:.0f}% = {detail['impot']:,.0f}€  \n"
+        
         with col_resume1:
-            st.markdown("**🏢 NIVEAU SARL**")
-            st.info(f"""
+            st.markdown("#### 🏢 NIVEAU SARL")
+            st.markdown(f"""
             **Résultat initial :** {resultat_initial:,.0f}€  
             **Charges existantes :** {charges_existantes:,.0f}€  
             **Résultat avant rémun. :** {resultat_initial - charges_existantes:,.0f}€  
             
             **Rémunération brute :** {meilleur_avec_niches['remuneration_brute']:,.0f}€  
             **Cotisations TNS :** {meilleur_avec_niches['cotisations_tns']:,.0f}€  
+            """)
+            
+            with st.expander("📊 Détail cotisations TNS"):
+                st.markdown(cotisations_detail_str)
+            
+            st.markdown(f"""
             **Charge Madelin :** {meilleur_avec_niches.get('madelin_charge', 0):,.0f}€  
             **Résultat après rémun. :** {meilleur_avec_niches['resultat_apres_remuneration']:,.0f}€  
             
             **IS SARL :** {meilleur_avec_niches['is_sarl']:,.0f}€  
-            **Dividendes SARL :** {meilleur_avec_niches['dividendes_sarl']:,.0f}€
             """)
+            
+            with st.expander("📊 Détail tranches IS"):
+                st.markdown(is_detail_str)
+            
+            st.markdown(f"**Dividendes SARL :** {meilleur_avec_niches['dividendes_sarl']:,.0f}€")
         
         with col_resume2:
-            st.markdown("**💼 NIVEAU PERSONNEL**")
-            st.success(f"""
+            st.markdown("#### 💼 NIVEAU PERSONNEL")
+            st.markdown(f"""
             **Rémunération nette avant IR :** {meilleur_avec_niches['remuneration_nette_avant_ir']:,.0f}€  
             **Abattement frais pro (10%) :** {meilleur_avec_niches['abattement_frais_pro']:,.0f}€  
             **Revenu imposable initial :** {meilleur_avec_niches['revenu_imposable']:,.0f}€  
@@ -277,6 +317,13 @@ def main():
             **Revenu imposable final :** {meilleur_avec_niches.get('revenu_imposable_final', meilleur_avec_niches['revenu_imposable']):,.0f}€  
             
             **IR avant Girardin :** {meilleur_avec_niches.get('ir_avant_girardin', meilleur_avec_niches['ir_remuneration']):,.0f}€  
+            """)
+            
+            if ir_detail_str.strip():
+                with st.expander("📊 Détail tranches IR"):
+                    st.markdown(ir_detail_str)
+            
+            st.markdown(f"""
             **Réduction Girardin :** {meilleur_avec_niches.get('reduction_girardin', 0):,.0f}€  
             **IR final :** {meilleur_avec_niches['ir_remuneration']:,.0f}€  
             
@@ -290,8 +337,8 @@ def main():
             """)
         
         with col_resume3:
-            st.markdown("**🏠 NIVEAU HOLDING + FINAL**")
-            st.warning(f"""
+            st.markdown("#### 🏠 NIVEAU HOLDING + FINAL")
+            st.markdown(f"""
             **Dividendes reçus :** {meilleur_avec_niches['dividendes_sarl']:,.0f}€  
             **Quote-part imposable (5%) :** {meilleur_avec_niches['quote_part_imposable']:,.0f}€  
             **IS Holding :** {meilleur_avec_niches['is_holding']:,.0f}€  
