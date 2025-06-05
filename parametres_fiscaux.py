@@ -33,18 +33,29 @@ TAUX_COTISATIONS_TNS = {
 TAUX_COTISATIONS_SALARIE = 0.22  # Approximation cotisations salariales
 TAUX_COTISATIONS_PATRONALES = 0.42  # Approximation cotisations patronales
 
-# Micro-entreprise BIC (Bénéfices Industriels et Commerciaux)
-MICRO_BIC = {
+# Micro-entreprise BIC - Activités de vente
+MICRO_BIC_VENTE = {
     'seuil': 188700,
     'abattement': 0.71,  # 71% d'abattement
     'cotisations': 0.126  # 12.6% de cotisations sociales
 }
 
+# Micro-entreprise BIC - Prestations de services
+MICRO_BIC_SERVICES = {
+    'seuil': 77700,
+    'abattement': 0.50,  # 50% d'abattement
+    'cotisations': 0.212  # 21.2% de cotisations sociales
+}
+
+# Pour compatibilité - par défaut on prend les services
+MICRO_BIC = MICRO_BIC_SERVICES
+
 # Micro-entreprise BNC (Bénéfices Non Commerciaux)
+# Professions libérales
 MICRO_BNC = {
     'seuil': 77700,
     'abattement': 0.34,  # 34% d'abattement
-    'cotisations': 0.218  # 21.8% de cotisations sociales
+    'cotisations': 0.246  # 24.6% de cotisations sociales
 }
 
 # Dividendes et flat tax
@@ -69,10 +80,13 @@ SEUIL_ALLOCATIONS_FAMILIALES_REDUIT = 162288  # 3.5 PASS 2024
 TAUX_ECONOMIE_PER = 0.30  # Approximation économie fiscale PER
 TAUX_ECONOMIE_IS_MADELIN = 0.25  # Économie IS pour charge Madelin
 
+# ACRE (Aide à la Création ou à la Reprise d'une Entreprise)
+TAUX_REDUCTION_ACRE = 0.50  # 50% de réduction des cotisations sociales la 1ère année
+
 # Configuration par forme juridique
 FORMES_JURIDIQUES_CONFIG = {
     'Micro-entreprise': {
-        'optimisations_disponibles': ['per'],
+        'optimisations_disponibles': ['per', 'madelin', 'acre'],
         'calcul_cotisations': 'micro',
         'type_revenus': 'ca'
     },

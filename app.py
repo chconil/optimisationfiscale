@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.subplots as sp
 from formes_juridiques import creer_optimiseur, FORMES_JURIDIQUES
-from parametres_fiscaux import TAUX_COTISATIONS_TNS
+from parametres_fiscaux import TAUX_COTISATIONS_TNS, MICRO_BIC, MICRO_BNC, MICRO_BIC_VENTE, MICRO_BIC_SERVICES
 
 def main():
     st.set_page_config(
@@ -34,48 +34,72 @@ def main():
         
         # Paramètres de base
         st.subheader("📊 Paramètres de base")
-        # Adapter l'interface selon la forme juridique
+        # Interface adaptée selon la forme juridique mais avec conservation des valeurs
+        if 'resultat_initial' not in st.session_state:
+            if forme_juridique == "Micro-entreprise":
+                st.session_state.resultat_initial = 100000
+            else:
+                st.session_state.resultat_initial = 300000
+        
         if forme_juridique == "Micro-entreprise":
             resultat_initial = st.number_input(
                 "Chiffre d'affaires (€)",
                 min_value=0,
-                value=100000,
+                value=st.session_state.resultat_initial,
                 step=5000,
-                help="Chiffre d'affaires de votre micro-entreprise"
+                help="Chiffre d'affaires de votre micro-entreprise (peut dépasser les seuils pendant 2 ans)",
+                key="resultat_micro"
             )
             type_activite = st.selectbox(
                 "Type d'activité",
-                ["BIC", "BNC"],
-                help="BIC = Bénéfices Industriels et Commerciaux / BNC = Bénéfices Non Commerciaux"
+                ["BIC - Prestations de services", "BIC - Vente de marchandises", "BNC - Professions libérales"],
+                help="Choisissez votre type d'activité pour appliquer les bons taux et abattements"
             )
         else:
             resultat_initial = st.number_input(
                 "Résultat avant rémunération (€)",
                 min_value=0,
-                value=300000,
+                value=st.session_state.resultat_initial,
                 step=10000,
-                help=f"Résultat de votre {forme_juridique} avant déduction de la rémunération"
+                help=f"Résultat de votre {forme_juridique} avant déduction de la rémunération",
+                key="resultat_societe"
             )
         
-        # Charges existantes sauf pour micro-entreprise
-        if forme_juridique != "Micro-entreprise":
+        # Mise à jour du session state
+        st.session_state.resultat_initial = resultat_initial
+        
+        # Charges existantes pour toutes les formes juridiques
+        if 'charges_existantes' not in st.session_state:
+            st.session_state.charges_existantes = 50000
+        if 'parts_fiscales' not in st.session_state:
+            st.session_state.parts_fiscales = 2.0
+            
+        if forme_juridique == "Micro-entreprise":
+            charges_existantes = st.number_input(
+                "Charges réelles estimées (€)",
+                min_value=0,
+                value=st.session_state.charges_existantes,
+                step=5000,
+                help="Charges réelles à déduire du revenu net final (frais, matériel, etc.)"
+            )
+        else:
             charges_existantes = st.number_input(
                 "Charges existantes (€)",
                 min_value=0,
-                value=50000,
+                value=st.session_state.charges_existantes,
                 step=5000,
                 help="Autres charges déjà déduites du résultat"
             )
-        else:
-            charges_existantes = 0
+        st.session_state.charges_existantes = charges_existantes
         
         parts_fiscales = st.number_input(
             "Nombre de parts fiscales",
             min_value=1.0,
-            value=2.0,
+            value=st.session_state.parts_fiscales,
             step=0.25,
             help="Votre nombre de parts fiscales pour le calcul de l'IR"
         )
+        st.session_state.parts_fiscales = parts_fiscales
         
         # Créer l'optimiseur pour connaître les optimisations disponibles
         optimiseur_temp = creer_optimiseur(forme_juridique, resultat_avant_remuneration=resultat_initial, 
@@ -122,6 +146,14 @@ def main():
                     step=500,
                     help="Plafond légal pour les charges Madelin TNS déductibles"
                 )
+        
+        # ACRE (pour micro-entreprise)
+        use_acre = False
+        if 'acre' in optimisations_disponibles:
+            use_acre = st.checkbox(
+                "🎆 ACRE (Aide à la Création d'Entreprise)",
+                help="Réduction de 50% des cotisations sociales la première année (sous conditions)"
+            )
         
         # Girardin (pour les IR)
         use_girardin = False
@@ -173,7 +205,9 @@ def main():
                 meilleur_global, tous_scenarios = optimiseur.optimiser(
                     type_activite=type_activite,
                     pas=pas_calcul,
-                    per_max=per_max if use_per else 0
+                    per_max=per_max if use_per else 0,
+                    madelin_max=madelin_max if use_madelin else 0,
+                    acre=use_acre
                 )
                 # Adapter format pour compatibilité
                 tous_scenarios_niches = [{'scenarios': tous_scenarios, 'meilleur': meilleur_global}]
@@ -216,7 +250,7 @@ def main():
             
             # Scénario de référence sans optimisations pour comparaison
             if forme_juridique == "Micro-entreprise":
-                scenario_ref = optimiseur.calculer_scenario(meilleur_avec_niches['chiffre_affaires'], type_activite)
+                scenario_ref = optimiseur.calculer_scenario(meilleur_avec_niches['chiffre_affaires'], type_activite, acre=False)
             elif forme_juridique == "SAS":
                 scenario_ref = optimiseur.calculer_scenario(meilleur_avec_niches['salaire_brut'])
             else:
@@ -300,7 +334,7 @@ def main():
             
             # Détail des optimisations
             optimisations = meilleur_avec_niches.get('optimisations', {})
-            if any(optimisations.get(k, 0) > 0 for k in ['per', 'madelin', 'girardin']):
+            if any(optimisations.get(k, 0) > 0 or optimisations.get(k, False) for k in ['per', 'madelin', 'girardin', 'acre']):
                 st.subheader("🎯 Optimisations Utilisées")
                 
                 if optimisations.get('per', 0) > 0:
@@ -308,6 +342,10 @@ def main():
                 
                 if optimisations.get('madelin', 0) > 0:
                     st.info(f"🏥 Madelin (charge déductible) : {optimisations['madelin']:,.0f}€")
+                
+                if optimisations.get('acre', False):
+                    acre_economie = meilleur_avec_niches.get('acre_reduction', 0)
+                    st.success(f"🎆 ACRE : -50% cotisations (économie {acre_economie:,.0f}€)")
                 
                 if optimisations.get('girardin', 0) > 0:
                     st.error(f"🏭 Girardin : {optimisations['girardin']:,.0f}€")
@@ -317,16 +355,25 @@ def main():
         with col2:
             st.subheader("📊 Répartition du Revenu")
             
-            # Graphique en camembert
-            labels = ['Salaire Net', 'Dividendes Nets', 'Cotisations TNS', 'IR', 'IS Total', 'Flat Tax']
-            values = [
-                meilleur_avec_niches['remuneration_nette_apres_ir'],
-                meilleur_avec_niches['dividendes_nets'],
-                meilleur_avec_niches['cotisations_tns'],
-                meilleur_avec_niches['ir_remuneration'],
-                meilleur_avec_niches['is_sarl'] + meilleur_avec_niches['is_holding'],
-                meilleur_avec_niches['flat_tax']
-            ]
+            # Graphique en camembert adapté selon la forme juridique
+            if forme_juridique == "Micro-entreprise":
+                labels = ['Net Final', 'Cotisations Sociales', 'IR', 'PER']
+                values = [
+                    meilleur_avec_niches.get('net_final', 0),
+                    meilleur_avec_niches.get('cotisations_sociales', 0),
+                    meilleur_avec_niches.get('ir', 0),
+                    meilleur_avec_niches.get('optimisations', {}).get('per', 0)
+                ]
+            else:
+                labels = ['Salaire Net', 'Dividendes Nets', 'Cotisations TNS', 'IR', 'IS Total', 'Flat Tax']
+                values = [
+                    meilleur_avec_niches.get('remuneration_nette_apres_ir', 0),
+                    meilleur_avec_niches.get('dividendes_nets', 0),
+                    meilleur_avec_niches.get('cotisations_tns', 0),
+                    meilleur_avec_niches.get('ir_remuneration', 0),
+                    meilleur_avec_niches.get('is_sarl', 0) + meilleur_avec_niches.get('is_holding', 0),
+                    meilleur_avec_niches.get('flat_tax', 0)
+                ]
             
             fig_pie = go.Figure(data=[go.Pie(
                 labels=labels,
@@ -337,7 +384,7 @@ def main():
             )])
             
             fig_pie.update_layout(
-                title="Répartition du résultat initial",
+                title=f"Répartition - {forme_juridique}",
                 height=400
             )
             
@@ -349,20 +396,35 @@ def main():
         # Colonnes pour l'affichage du résumé
         col_resume1, col_resume2, col_resume3 = st.columns(3)
         
-        # Préparer les détails des cotisations TNS
+        # Préparer les détails des cotisations (adapté selon la forme)
         cotisations_detail_str = ""
-        for nom, montant in meilleur_avec_niches['cotisations_detail'].items():
-            nom_affiche = {
-                'maladie': 'Maladie',
-                'allocations_familiales': 'Allocations familiales', 
-                'retraite_base': 'Retraite base',
-                'retraite_complementaire': 'Retraite complémentaire',
-                'invalidite_deces': 'Invalidité décès',
-                'csg_crds': 'CSG/CRDS',
-                'formation': 'Formation'
-            }.get(nom, nom)
-            taux = TAUX_COTISATIONS_TNS.get(nom, 0) * 100
-            cotisations_detail_str += f"  • {nom_affiche} ({taux:.2f}%) : {montant:,.0f}€  \n"
+        if forme_juridique == "Micro-entreprise":
+            # Pour la micro : détail des cotisations sociales
+            type_activite_resultat = meilleur_avec_niches.get('type_activite', 'BIC - Prestations de services')
+            if type_activite_resultat == 'BIC - Vente de marchandises':
+                config = MICRO_BIC_VENTE
+            elif type_activite_resultat in ['BIC - Prestations de services', 'BIC']:
+                config = MICRO_BIC_SERVICES
+            else:
+                config = MICRO_BNC
+            taux_effectif = meilleur_avec_niches.get('taux_cotisations_effectif', config['cotisations'])
+            cotisations_detail_str = f"  • Cotisations sociales ({taux_effectif*100:.1f}%) : {meilleur_avec_niches.get('cotisations_sociales', 0):,.0f}€  \n"
+            if meilleur_avec_niches.get('acre_reduction', 0) > 0:
+                cotisations_detail_str += f"  • Réduction ACRE (-50%) : -{meilleur_avec_niches.get('acre_reduction', 0):,.0f}€  \n"
+        else:
+            # Pour les autres formes : détail TNS
+            for nom, montant in meilleur_avec_niches.get('cotisations_detail', {}).items():
+                nom_affiche = {
+                    'maladie': 'Maladie',
+                    'allocations_familiales': 'Allocations familiales', 
+                    'retraite_base': 'Retraite base',
+                    'retraite_complementaire': 'Retraite complémentaire',
+                    'invalidite_deces': 'Invalidité décès',
+                    'csg_crds': 'CSG/CRDS',
+                    'formation': 'Formation'
+                }.get(nom, nom)
+                taux = TAUX_COTISATIONS_TNS.get(nom, 0) * 100
+                cotisations_detail_str += f"  • {nom_affiche} ({taux:.2f}%) : {montant:,.0f}€  \n"
         
         # Préparer les détails IS
         is_detail_str = ""
@@ -376,29 +438,50 @@ def main():
                 ir_detail_str += f"  • De {detail['de']:,.0f}€ à {detail['a']:,.0f}€ : {detail['taux']*100:.0f}% = {detail['impot']:,.0f}€  \n"
         
         with col_resume1:
-            st.markdown("#### 🏢 NIVEAU SARL")
-            st.markdown(f"""
-            **Résultat initial :** {resultat_initial:,.0f}€  
-            **Charges existantes :** {charges_existantes:,.0f}€  
-            **Résultat avant rémun. :** {resultat_initial - charges_existantes:,.0f}€  
-            
-            **Rémunération brute :** {meilleur_avec_niches['remuneration_brute']:,.0f}€  
-            
-            """)
-            
-            with st.expander(f"**Cotisations TNS :** {meilleur_avec_niches['cotisations_tns']:,.0f}€  "):
-                st.markdown(cotisations_detail_str)
-            
-            st.markdown(f"""
-            **Charge Madelin :** {meilleur_avec_niches.get('madelin_charge', 0):,.0f}€  
-            **Résultat après rémun. :** {meilleur_avec_niches['resultat_apres_remuneration']:,.0f}€  
-            
-            """)
-            
-            with st.expander(f"**IS SARL :** {meilleur_avec_niches['is_sarl']:,.0f}€  "):
-                st.markdown(is_detail_str)
-            
-            st.markdown(f"**Dividendes SARL :** {meilleur_avec_niches['dividendes_sarl']:,.0f}€")
+            if forme_juridique == "Micro-entreprise":
+                st.markdown("#### 💼 NIVEAU MICRO-ENTREPRISE")
+                st.markdown(f"""
+                **Chiffre d'affaires :** {meilleur_avec_niches['chiffre_affaires']:,.0f}€  
+                **Type d'activité :** {meilleur_avec_niches.get('type_activite', 'BIC')}  
+                
+                **Abattement fiscal :** {meilleur_avec_niches.get('abattement_micro', 0):,.0f}€  
+                **Base imposable :** {meilleur_avec_niches.get('base_imposable', 0):,.0f}€  
+                
+                """)
+                
+                with st.expander(f"**Cotisations sociales :** {meilleur_avec_niches.get('cotisations_sociales', 0):,.0f}€  "):
+                    st.markdown(cotisations_detail_str)
+                
+                st.markdown(f"""
+                **Net avant charges :** {meilleur_avec_niches.get('net_avant_charges', 0):,.0f}€  
+                **Charges réelles :** {meilleur_avec_niches.get('charges_reelles', 0):,.0f}€  
+                **Net final :** {meilleur_avec_niches.get('net_final', 0):,.0f}€  
+                
+                """)
+            else:
+                st.markdown("#### 🏢 NIVEAU SARL")
+                st.markdown(f"""
+                **Résultat initial :** {resultat_initial:,.0f}€  
+                **Charges existantes :** {charges_existantes:,.0f}€  
+                **Résultat avant rémun. :** {resultat_initial - charges_existantes:,.0f}€  
+                
+                **Rémunération brute :** {meilleur_avec_niches['remuneration_brute']:,.0f}€  
+                
+                """)
+                
+                with st.expander(f"**Cotisations TNS :** {meilleur_avec_niches['cotisations_tns']:,.0f}€  "):
+                    st.markdown(cotisations_detail_str)
+                
+                st.markdown(f"""
+                **Charge Madelin :** {meilleur_avec_niches.get('madelin_charge', 0):,.0f}€  
+                **Résultat après rémun. :** {meilleur_avec_niches['resultat_apres_remuneration']:,.0f}€  
+                
+                """)
+                
+                with st.expander(f"**IS SARL :** {meilleur_avec_niches['is_sarl']:,.0f}€  "):
+                    st.markdown(is_detail_str)
+                
+                st.markdown(f"**Dividendes SARL :** {meilleur_avec_niches['dividendes_sarl']:,.0f}€")
         
         with col_resume2:
             st.markdown("#### 💼 NIVEAU PERSONNEL")
@@ -430,7 +513,10 @@ def main():
             """)
         
         with col_resume3:
-            st.markdown("#### 🏠 NIVEAU HOLDING + FINAL")
+            if forme_juridique == "SARL + Holding":
+                st.markdown("#### 🏠 NIVEAU HOLDING + FINAL")
+            else:
+                st.markdown("#### 🎯 RÉSULTAT FINAL")
             st.markdown(f"""
             **Dividendes reçus :** {meilleur_avec_niches['dividendes_sarl']:,.0f}€  
             **Quote-part imposable (5%) :** {meilleur_avec_niches['quote_part_imposable']:,.0f}€  
@@ -444,9 +530,25 @@ def main():
             **🎯 TOTAL NET PERÇU :** {meilleur_avec_niches['total_net']:,.0f}€  
             **Taux prélèvement global :** {meilleur_avec_niches['taux_prelevement_global']:.1f}%
             """)
+            
+            if forme_juridique != "SARL + Holding":
+                # Pour les autres formes juridiques
+                st.markdown(f"""
+                **💎 Total revenus nets :** {meilleur_avec_niches['total_net']:,.0f}€  
+                **📄 Taux prélèvement global :** {meilleur_avec_niches['taux_prelevement_global']:.1f}%  
+                
+                **Détail :**  
+                • Revenus nets : {meilleur_avec_niches.get('remuneration_nette_apres_ir', meilleur_avec_niches.get('net_final', 0)):,.0f}€  
+                • Dividendes nets : {meilleur_avec_niches.get('dividendes_nets', 0):,.0f}€  
+                • Économies optimisations : {meilleur_avec_niches['optimisations']['economies_totales']:,.0f}€  
+                """)
         
         # Tableau récapitulatif des économies d'impôts si optimisations
-        if any(meilleur_avec_niches['optimisations'][k] > 0 for k in ['per', 'madelin', 'girardin']):
+        optimisations_actives = (
+            any(meilleur_avec_niches['optimisations'].get(k, 0) > 0 for k in ['per', 'madelin', 'girardin']) or
+            meilleur_avec_niches['optimisations'].get('acre', False)
+        )
+        if optimisations_actives:
             st.subheader("💰 Détail des Économies d'Impôts")
             
             col_eco1, col_eco2, col_eco3, col_eco4 = st.columns(4)
@@ -466,10 +568,13 @@ def main():
                     st.metric("🏥 Madelin", "Non utilisé", "0€")
             
             with col_eco3:
-                if meilleur_avec_niches['optimisations']['girardin'] > 0:
+                if meilleur_avec_niches['optimisations'].get('acre', False):
+                    acre_economie = meilleur_avec_niches.get('acre_reduction', 0)
+                    st.metric("🎆 ACRE", "Activée", f"Économie: {acre_economie:,.0f}€")
+                elif meilleur_avec_niches['optimisations'].get('girardin', 0) > 0:
                     st.metric("🏭 Girardin", f"{meilleur_avec_niches['optimisations']['girardin']:,.0f}€", f"Réduction: {meilleur_avec_niches.get('reduction_girardin', 0):,.0f}€")
                 else:
-                    st.metric("🏭 Girardin", "Non utilisé", "0€")
+                    st.metric("🎆 ACRE / 🏭 Girardin", "Non utilisé", "0€")
             
             with col_eco4:
                 st.metric("💰 TOTAL ÉCONOMIES", f"{meilleur_avec_niches['optimisations']['economies_totales']:,.0f}€", f"vs sans optim: +{meilleur_avec_niches['total_net'] - meilleur_classique['total_net']:,.0f}€")
