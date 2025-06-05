@@ -20,7 +20,7 @@ class SAS(OptimisationFiscale):
     def get_optimisations_disponibles(self):
         return get_optimisations_disponibles('SAS')
     
-    def calculer_scenario(self, salaire_brut, per_montant=0, girardin_montant=0, **kwargs):
+    def calculer_scenario_base(self, salaire_brut, **kwargs):
         """Calcule un scénario SAS"""
         resultats = {'forme_juridique': 'SAS'}
         
@@ -40,36 +40,19 @@ class SAS(OptimisationFiscale):
         salaire_net_avant_ir = salaire_brut - cotisations_salariales
         resultats['salaire_net_avant_ir'] = salaire_net_avant_ir
         
-        # Revenu imposable avec abattement 10%
+        # Revenu imposable avec abattement 10% (avant PER)
         abattement = min(salaire_net_avant_ir * ABATTEMENT_FRAIS_PRO, PLAFOND_ABATTEMENT_FRAIS_PRO)
         revenu_imposable = salaire_net_avant_ir - abattement
         resultats['abattement_frais_pro'] = abattement
-        resultats['revenu_imposable'] = revenu_imposable
+        resultats['revenu_imposable'] = revenu_imposable  # Pour PER dans la base
         
-        # PER
-        per_deduction = min(per_montant, min(revenu_imposable * 0.10, PLAFOND_PER))
-        revenu_imposable_final = revenu_imposable - per_deduction
-        resultats['per_deduction'] = per_deduction
-        resultats['revenu_imposable_final'] = revenu_imposable_final
-        
-        # IR
-        ir_avant_girardin, ir_detail = self.calculer_ir(revenu_imposable_final)
-        
-        # Girardin
-        reduction_girardin = min(girardin_montant * TAUX_GIRARDIN_INDUSTRIEL, ir_avant_girardin)
-        ir_final = ir_avant_girardin - reduction_girardin
-        
-        resultats['ir_avant_girardin'] = ir_avant_girardin
-        resultats['reduction_girardin'] = reduction_girardin
-        resultats['ir_final'] = ir_final
-        resultats['ir_remuneration'] = ir_final  # Alias pour compatibilité avec l'interface
+        # IR de base (sans PER/Girardin - sera recalculé dans la base)
+        ir_base, ir_detail = self.calculer_ir(revenu_imposable)
+        resultats['ir_base'] = ir_base
         resultats['ir_detail'] = ir_detail
         
-        # Salaire net final
-        salaire_net_final = salaire_net_avant_ir - ir_final
-        resultats['salaire_net_final'] = salaire_net_final
-        resultats['remuneration_nette_avant_ir'] = salaire_net_avant_ir  # Alias pour compatibilité
-        resultats['remuneration_nette_apres_ir'] = salaire_net_final  # Alias pour compatibilité
+        # Salaire net de base
+        resultats['remuneration_nette_avant_ir'] = salaire_net_avant_ir
         
         # Résultat après charges sociales et salaires
         resultat_apres_salaire = self.resultat_avant_remuneration - cout_total_salaire
@@ -92,13 +75,10 @@ class SAS(OptimisationFiscale):
         resultats['flat_tax'] = flat_tax
         resultats['dividendes_nets'] = dividendes_nets
         
-        # Total net (en déduisant investissement Girardin)
-        total_net = salaire_net_final + max(0, dividendes_nets) - girardin_montant
+        # Total net de base (avant PER/Girardin)
+        salaire_net_base = salaire_net_avant_ir - ir_base
+        total_net = salaire_net_base + max(0, dividendes_nets)
         resultats['total_net'] = total_net
-        
-        # Taux de prélèvement global
-        total_prelevements = (self.resultat_avant_remuneration - total_net)
-        resultats['taux_prelevement_global'] = (total_prelevements / self.resultat_avant_remuneration * 100) if self.resultat_avant_remuneration > 0 else 0
         
         # Calcul du taux de prélèvement sur les dividendes
         if resultat_apres_salaire > 0:
@@ -117,11 +97,17 @@ class SAS(OptimisationFiscale):
         resultats['taux_prelevement_dividendes'] = taux_prelevement_dividendes
         
         resultats['optimisations'] = {
-            'per': per_montant,
             'madelin': 0,
-            'girardin': girardin_montant,
-            'economies_totales': per_deduction * TAUX_ECONOMIE_PER + reduction_girardin
+            'economies_totales': 0  # Sera calculé dans la base
         }
+        
+        # Calcul du taux de prélèvement global
+        total_prelevements = cotisations_salariales + cotisations_patronales + ir_base + is_total + flat_tax
+        if self.resultat_initial > 0:
+            taux_prelevement_global = (total_prelevements / self.resultat_initial) * 100
+        else:
+            taux_prelevement_global = 0
+        resultats['taux_prelevement_global'] = taux_prelevement_global
         
         return resultats
     

@@ -234,7 +234,7 @@ def main():
                     girardin_max=girardin_max if use_girardin else 0
                 )
                 # Adapter format pour compatibilité
-                tous_scenarios_niches = tous_scenarios
+                tous_scenarios_niches = [{'scenarios': tous_scenarios, 'meilleur': meilleur_global}]
             else:
                 # Autres formes juridiques
                 meilleur_global, tous_scenarios = optimiseur.optimiser(
@@ -264,7 +264,7 @@ def main():
             
             # Scénario de référence sans optimisations pour comparaison
             if forme_juridique == "Micro-entreprise":
-                scenario_ref = optimiseur.calculer_scenario(meilleur_avec_niches['chiffre_affaires'], type_activite, acre=False)
+                scenario_ref = optimiseur.calculer_scenario(meilleur_avec_niches['chiffre_affaires'], type_activite=type_activite, acre=False)
             elif forme_juridique == "SAS":
                 scenario_ref = optimiseur.calculer_scenario(meilleur_avec_niches['salaire_brut'])
             else:

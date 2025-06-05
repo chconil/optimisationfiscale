@@ -20,7 +20,7 @@ class Microentreprise(OptimisationFiscale):
     def get_optimisations_disponibles(self):
         return get_optimisations_disponibles('Micro-entreprise')
     
-    def calculer_scenario(self, chiffre_affaires, type_activite='BIC - Prestations de services', per_montant=0, madelin_montant=0, acre=False, **kwargs):
+    def calculer_scenario_base(self, chiffre_affaires, type_activite='BIC - Prestations de services', madelin_montant=0, acre=False, **kwargs):
         """Calcule un scénario micro-entreprise"""
         resultats = {'forme_juridique': 'Micro-entreprise'}
         
@@ -59,56 +59,42 @@ class Microentreprise(OptimisationFiscale):
         resultats['cotisations_sociales'] = cotisations_sociales
         resultats['taux_cotisations_effectif'] = taux_cotisations
         
-        # Base imposable après abattement
+        # Base imposable après abattement (avant PER)
         base_imposable = chiffre_affaires * (1 - config['abattement'])
         resultats['abattement_micro'] = chiffre_affaires * config['abattement']
-        resultats['base_imposable'] = base_imposable
+        resultats['revenu_imposable'] = base_imposable  # Pour PER dans la base
         
-        # PER
-        per_deduction = min(per_montant, min(base_imposable * 0.10, PLAFOND_PER))
-        base_imposable_finale = base_imposable - per_deduction
-        resultats['per_deduction'] = per_deduction
-        resultats['base_imposable_finale'] = base_imposable_finale
-        
-        # IR
-        ir, ir_detail = self.calculer_ir(base_imposable_finale)
-        resultats['ir'] = ir
+        # IR de base (sans PER/Girardin - sera recalculé dans la base)
+        ir_base, ir_detail = self.calculer_ir(base_imposable)
+        resultats['ir_base'] = ir_base
         resultats['ir_detail'] = ir_detail
         
         # Madelin en micro-entreprise (charge déductible personnelle)
         madelin_charge = min(madelin_montant, PLAFOND_MADELIN_TNS)
         resultats['madelin_charge'] = madelin_charge
         
-        # Net final avant déduction des charges réelles
-        net_avant_charges = chiffre_affaires - cotisations_sociales - ir - per_montant - madelin_charge
+        # Net de base (avant PER/Girardin - sera recalculé dans la base)
+        net_avant_charges = chiffre_affaires - cotisations_sociales - ir_base - madelin_charge
         resultats['net_avant_charges'] = net_avant_charges
+        resultats['remuneration_nette_avant_ir'] = net_avant_charges  # Pour calcul final dans la base
         
-        # Net final après déduction des charges réelles
+        # Net final de base (avant PER/Girardin)
         net_final = net_avant_charges - self.charges
         resultats['net_final'] = net_final
+        resultats['total_net'] = net_final  # Sera ajusté dans la base
         resultats['charges_reelles'] = self.charges
         
-        # Taux de prélèvement global (incluant les charges réelles)
-        total_prelevements = cotisations_sociales + ir + per_montant + madelin_charge + self.charges
-        resultats['taux_prelevement_global'] = (total_prelevements / chiffre_affaires * 100) if chiffre_affaires > 0 else 0
-        
         # Ajout des champs pour compatibilité avec l'interface
-        resultats['remuneration_nette_apres_ir'] = net_final + per_montant  # Équivalent salaire net
         resultats['dividendes_nets'] = 0  # Pas de dividendes en micro
         resultats['cotisations_tns'] = 0  # Pas de cotisations TNS
         resultats['cotisations_detail'] = {}  # Pas de détail TNS
-        resultats['ir_remuneration'] = ir
         resultats['is_sarl'] = 0  # Pas d'IS
         resultats['is_holding'] = 0  # Pas de holding
         resultats['flat_tax'] = 0  # Pas de flat tax
-        resultats['total_net'] = net_final
         
         # Champs spécifiques micro pour le résumé
         resultats['remuneration_brute'] = chiffre_affaires
-        resultats['remuneration_nette_avant_ir'] = net_avant_charges + per_montant
         resultats['abattement_frais_pro'] = 0  # Pas d'abattement frais pro en micro
-        resultats['revenu_imposable'] = base_imposable
-        resultats['revenu_imposable_final'] = base_imposable_finale
         resultats['resultat_apres_remuneration'] = 0  # Pas applicable
         resultats['is_detail'] = []
         resultats['dividendes_sarl'] = 0
@@ -116,12 +102,18 @@ class Microentreprise(OptimisationFiscale):
         resultats['dividendes_holding'] = 0
         
         resultats['optimisations'] = {
-            'per': per_montant,
             'madelin': madelin_montant,
-            'girardin': 0,
             'acre': acre,
-            'economies_totales': per_deduction * TAUX_ECONOMIE_PER + madelin_charge * TAUX_ECONOMIE_PER + resultats['acre_reduction']
+            'economies_totales': madelin_charge * TAUX_ECONOMIE_PER + resultats['acre_reduction']
         }
+        
+        # Calcul du taux de prélèvement global
+        total_prelevements = cotisations_sociales + ir_base + madelin_charge
+        if chiffre_affaires > 0:
+            taux_prelevement_global = (total_prelevements / chiffre_affaires) * 100
+        else:
+            taux_prelevement_global = 0
+        resultats['taux_prelevement_global'] = taux_prelevement_global
         
         return resultats
     

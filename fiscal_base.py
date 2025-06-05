@@ -90,10 +90,93 @@ class OptimisationFiscale(ABC):
         
         return is_total, details
     
+    def calculer_ir_avec_girardin(self, revenu_imposable, girardin_montant=0):
+        """Calcule l'IR avec réduction Girardin - commun à toutes les formes"""
+        ir_avant_girardin, ir_detail = self.calculer_ir(revenu_imposable)
+        
+        # Girardin
+        reduction_girardin = min(girardin_montant * TAUX_GIRARDIN_INDUSTRIEL, ir_avant_girardin)
+        ir_final = ir_avant_girardin - reduction_girardin
+        
+        return {
+            'ir_avant_girardin': ir_avant_girardin,
+            'reduction_girardin': reduction_girardin,
+            'ir_final': ir_final,
+            'ir_detail': ir_detail,
+            # Alias pour compatibilité
+            'ir': ir_final,
+            'ir_remuneration': ir_final
+        }
+    
     @abstractmethod
-    def calculer_scenario(self, remuneration, **kwargs):
-        """Méthode abstraite - chaque forme juridique doit l'implémenter"""
+    def calculer_scenario_base(self, remuneration, **kwargs):
+        """Méthode abstraite - calcul de base sans PER/Girardin"""
         pass
+    
+    def appliquer_optimisations_personnelles(self, scenario_base, per_montant=0, girardin_montant=0):
+        """Applique PER et Girardin sur un scénario de base - commun à toutes les formes"""
+        scenario = scenario_base.copy()
+        
+        # Sécurisation des types
+        per_montant = float(per_montant) if per_montant else 0
+        girardin_montant = float(girardin_montant) if girardin_montant else 0
+        
+        # Récupère le revenu imposable de base
+        revenu_imposable_base = float(scenario.get('revenu_imposable', 0))
+        
+        # 1. Application du PER
+        per_deduction = min(per_montant, min(revenu_imposable_base * 0.10, PLAFOND_PER))
+        revenu_imposable_final = revenu_imposable_base - per_deduction
+        
+        scenario['per_deduction'] = per_deduction
+        scenario['revenu_imposable_final'] = revenu_imposable_final
+        
+        # 2. Recalcul de l'IR avec Girardin
+        ir_resultats = self.calculer_ir_avec_girardin(revenu_imposable_final, girardin_montant)
+        scenario.update(ir_resultats)
+        
+        # 3. Mise à jour du net final avec les optimisations personnelles
+        remuneration_nette_avant_ir = float(scenario.get('remuneration_nette_avant_ir', 0))
+        scenario['remuneration_nette_apres_ir'] = remuneration_nette_avant_ir - ir_resultats['ir_final']
+        
+        # 4. Déduction de l'investissement Girardin du total net
+        total_net_base = float(scenario.get('total_net', 0))
+        scenario['total_net'] = total_net_base - girardin_montant
+        
+        # 5. Mise à jour des optimisations
+        if 'optimisations' not in scenario:
+            scenario['optimisations'] = {}
+        
+        scenario['optimisations'].update({
+            'per': per_montant,
+            'girardin': girardin_montant,
+            'economies_per': per_deduction * TAUX_ECONOMIE_PER,
+            'economies_girardin': ir_resultats['reduction_girardin'],
+        })
+        
+        # Recalcul des économies totales
+        economies_totales = (float(scenario['optimisations'].get('economies_totales', 0)) + 
+                           scenario['optimisations']['economies_per'] + 
+                           scenario['optimisations']['economies_girardin'])
+        scenario['optimisations']['economies_totales'] = economies_totales
+        
+        return scenario
+    
+    def calculer_scenario(self, remuneration, per_montant=0, girardin_montant=0, **kwargs):
+        """Méthode finale qui combine scénario de base + optimisations personnelles"""
+        # Extraction des optimisations personnelles des kwargs
+        per_montant = kwargs.pop('per_montant', per_montant)
+        girardin_montant = kwargs.pop('girardin_montant', girardin_montant)
+        
+        # 1. Calcul du scénario de base (spécifique à chaque forme juridique)
+        scenario_base = self.calculer_scenario_base(remuneration, **kwargs)
+        
+        # 2. Application des optimisations personnelles (communes à toutes les formes)
+        scenario_final = self.appliquer_optimisations_personnelles(
+            scenario_base, per_montant, girardin_montant
+        )
+        
+        return scenario_final
     
     def get_range_remuneration(self, pas=5000):
         """Retourne la plage de rémunération à tester selon la forme juridique"""
@@ -108,32 +191,22 @@ class OptimisationFiscale(ABC):
         """Retourne la métrique à optimiser (peut être surchargé)"""
         return scenario.get('total_net', 0)
     
-    def optimiser(self, pas=5000, optimisations_selectionnees=None, **kwargs):
+    def optimiser(self, pas=5000, per_max=0, madelin_max=0, girardin_max=0, acre=False, **kwargs):
         """Méthode commune d'optimisation pour toutes les formes juridiques"""
         meilleur_scenario = None
         tous_scenarios = []
-        
-        # Si aucune optimisation n'est sélectionnée, utilise un scénario vide
-        if optimisations_selectionnees is None:
-            optimisations_selectionnees = {}
-        
-        # Génère le scénario d'optimisation basé sur les sélections
-        optimisations = self.get_scenario_optimisations(optimisations_selectionnees)
         
         # Obtient la plage de rémunération à tester
         range_remuneration = self.get_range_remuneration(pas)
         
         for remuneration in range_remuneration:
-            # Prépare les arguments pour calculer_scenario
+            # Prépare les arguments pour calculer_scenario avec les montants exacts de l'interface
             scenario_kwargs = {
-                'per_montant': optimisations.get('per', 0),
-                'madelin_montant': optimisations.get('madelin', 0),
-                'girardin_montant': optimisations.get('girardin', 0)
+                'per_montant': per_max,
+                'madelin_montant': madelin_max,
+                'girardin_montant': girardin_max,
+                'acre': acre
             }
-            
-            # Ajoute l'ACRE si sélectionné
-            if optimisations.get('acre', False):
-                scenario_kwargs['acre'] = True
             
             # Ajoute les autres kwargs spécifiques
             scenario_kwargs.update(kwargs)
@@ -160,26 +233,3 @@ class OptimisationFiscale(ABC):
         """Retourne la liste des optimisations disponibles pour cette forme"""
         pass
     
-    def get_scenario_optimisations(self, optimisations_selectionnees):
-        """Retourne un scénario d'optimisation basé sur les sélections de l'utilisateur"""
-        scenario = {
-            'per': 0,
-            'madelin': 0,
-            'girardin': 0,
-            'acre': False
-        }
-        
-        # Active uniquement les optimisations sélectionnées par l'utilisateur
-        if optimisations_selectionnees.get('per', False):
-            scenario['per'] = self.per_max
-        
-        if optimisations_selectionnees.get('madelin', False):
-            scenario['madelin'] = self.madelin_max
-            
-        if optimisations_selectionnees.get('girardin', False):
-            scenario['girardin'] = self.girardin_max
-            
-        if optimisations_selectionnees.get('acre', False):
-            scenario['acre'] = True
-        
-        return scenario
