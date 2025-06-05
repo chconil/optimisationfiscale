@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.subplots as sp
 from formes_juridiques import creer_optimiseur, FORMES_JURIDIQUES
-from calculs import OptimisationRemunerationSARL  # Garde la compatibilité
+from parametres_fiscaux import TAUX_COTISATIONS_TNS
 
 def main():
     st.set_page_config(
@@ -198,42 +198,21 @@ def main():
                 # Adapter format pour compatibilité
                 tous_scenarios_niches = [{'scenarios': tous_scenarios, 'meilleur': meilleur_global}]
             
-            # Forcer l'utilisation des optimisations cochées par l'utilisateur
-            meilleur_avec_niches = None
-            for strategie in tous_scenarios_niches:
-                opt = strategie['optimisations']
-                # Vérifier si cette stratégie correspond aux choix de l'utilisateur
-                per_match = (opt['per'] > 0) == use_per
-                madelin_match = (opt['madelin'] > 0) == use_madelin  
-                girardin_match = (opt['girardin'] > 0) == use_girardin
-                
-                if per_match and madelin_match and girardin_match:
-                    if meilleur_avec_niches is None or strategie['meilleur']['total_net'] > meilleur_avec_niches['total_net']:
-                        meilleur_avec_niches = strategie['meilleur']
+            # Utiliser directement le meilleur global pour toutes les formes
+            meilleur_avec_niches = meilleur_global
             
-            # Si aucune stratégie ne correspond, utiliser la meilleure globale
-            if meilleur_avec_niches is None:
-                meilleur_avec_niches = meilleur_global
-            
-            # Récupérer les scénarios de la stratégie choisie pour les graphiques
+            # Récupérer les scénarios pour les graphiques
             scenarios_avec_niches = None
-            for strategie in tous_scenarios_niches:
-                opt = strategie['optimisations']
-                per_match = (opt['per'] > 0) == use_per
-                madelin_match = (opt['madelin'] > 0) == use_madelin  
-                girardin_match = (opt['girardin'] > 0) == use_girardin
-                
-                if per_match and madelin_match and girardin_match:
-                    scenarios_avec_niches = strategie['scenarios']
-                    break
-            
-            # Fallback si aucune stratégie trouvée
-            if scenarios_avec_niches is None:
-                # Trouver la stratégie du meilleur global
-                for strategie in tous_scenarios_niches:
-                    if strategie['meilleur'] == meilleur_global:
-                        scenarios_avec_niches = strategie['scenarios']
-                        break
+            if tous_scenarios_niches and len(tous_scenarios_niches) > 0:
+                if forme_juridique == "SARL + Holding":
+                    # Pour SARL + Holding, chercher la stratégie du meilleur global
+                    for strategie in tous_scenarios_niches:
+                        if strategie['meilleur'] == meilleur_global:
+                            scenarios_avec_niches = strategie['scenarios']
+                            break
+                else:
+                    # Pour les autres formes, utiliser les scénarios du premier élément
+                    scenarios_avec_niches = tous_scenarios_niches[0]['scenarios']
             
             # Scénario de référence sans optimisations pour comparaison
             if forme_juridique == "Micro-entreprise":
@@ -382,7 +361,7 @@ def main():
                 'csg_crds': 'CSG/CRDS',
                 'formation': 'Formation'
             }.get(nom, nom)
-            taux = optimiseur.taux_cotisations_tns.get(nom, 0) * 100
+            taux = TAUX_COTISATIONS_TNS.get(nom, 0) * 100
             cotisations_detail_str += f"  • {nom_affiche} ({taux:.2f}%) : {montant:,.0f}€  \n"
         
         # Préparer les détails IS
