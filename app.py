@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.subplots as sp
 from formes_juridiques import creer_optimiseur, FORMES_JURIDIQUES
-from parametres_fiscaux import TAUX_COTISATIONS_TNS, MICRO_BIC, MICRO_BNC, MICRO_BIC_VENTE, MICRO_BIC_SERVICES
+from parametres_fiscaux import TAUX_COTISATIONS_TNS, MICRO_BIC, MICRO_BNC, MICRO_BIC_VENTE, MICRO_BIC_SERVICES, TAUX_COTISATIONS_SALARIE, TAUX_COTISATIONS_PATRONALES
 
 def main():
     st.set_page_config(
@@ -539,13 +539,27 @@ def main():
                 **Revenu imposable final :** {meilleur_avec_niches.get('revenu_imposable_final', meilleur_avec_niches['revenu_imposable']):,.0f}€  
                 """)
             
-            if ir_detail_str.strip():
-                with st.expander(f"**IR avant Girardin :** {meilleur_avec_niches.get('ir_avant_girardin', meilleur_avec_niches['ir_remuneration']):,.0f}€  "):
-                    st.markdown(ir_detail_str)
-            
-            st.markdown(f"""
-            **Réduction Girardin :** {meilleur_avec_niches.get('reduction_girardin', 0):,.0f}€  
-            **IR final :** {meilleur_avec_niches['ir_remuneration']:,.0f}€  
+            if forme_juridique == "SAS":
+                # Pour la SAS, toujours afficher l'IR avant Girardin
+                if ir_detail_str.strip():
+                    with st.expander(f"**IR avant Girardin :** {meilleur_avec_niches.get('ir_avant_girardin', meilleur_avec_niches['ir_remuneration']):,.0f}€  "):
+                        st.markdown(ir_detail_str)
+                else:
+                    st.markdown(f"**IR avant Girardin :** {meilleur_avec_niches.get('ir_avant_girardin', meilleur_avec_niches['ir_remuneration']):,.0f}€  ")
+                
+                st.markdown(f"""
+                **Réduction Girardin :** {meilleur_avec_niches.get('reduction_girardin', 0):,.0f}€  
+                **IR final :** {meilleur_avec_niches['ir_remuneration']:,.0f}€  
+                """)
+            else:
+                # Pour les autres formes, comportement normal
+                if ir_detail_str.strip():
+                    with st.expander(f"**IR avant Girardin :** {meilleur_avec_niches.get('ir_avant_girardin', meilleur_avec_niches['ir_remuneration']):,.0f}€  "):
+                        st.markdown(ir_detail_str)
+                
+                st.markdown(f"""
+                **Réduction Girardin :** {meilleur_avec_niches.get('reduction_girardin', 0):,.0f}€  
+                **IR final :** {meilleur_avec_niches['ir_remuneration']:,.0f}€  
             """)
             
             if forme_juridique == "SAS":
