@@ -5,7 +5,7 @@ Outil CLI pour exporter les données d'optimisation fiscale
 import argparse
 import csv
 import sys
-from calculs import OptimisationRemunerationSARL
+from formes_juridiques import SARLHolding
 
 def afficher_tableau(scenarios, format_output='table'):
     """Affiche les scénarios sous forme de tableau ou CSV"""
@@ -117,7 +117,7 @@ def main():
     args = parser.parse_args()
     
     # Initialisation
-    optimiseur = OptimisationRemunerationSARL(
+    optimiseur = SARLHolding(
         resultat_avant_remuneration=args.resultat,
         charges_existantes=args.charges,
         parts_fiscales=args.parts
@@ -139,27 +139,21 @@ def main():
             print(f"  Girardin: {args.girardin:,}€")
     
     # Calcul des scénarios
-    meilleur_scenario, tous_scenarios = optimiseur.optimiser_avec_niches(
+    meilleur_scenario, tous_scenarios = optimiseur.optimiser(
         pas=args.pas,
-        min_salaire=args.min_salaire,
-        max_salaire=max_salaire,
         per_max=args.per,
         madelin_max=args.madelin,
         girardin_max=args.girardin
     )
     
-    # Trouver la stratégie correspondante
-    scenarios_a_afficher = None
-    for strategie in tous_scenarios:
-        opt = strategie['optimisations']
-        if (opt['per'] == args.per and 
-            opt['madelin'] == args.madelin and 
-            opt['girardin'] == args.girardin):
-            scenarios_a_afficher = strategie['scenarios']
-            break
+    # Filtrer les scénarios selon la plage demandée
+    scenarios_a_afficher = [
+        s for s in tous_scenarios 
+        if args.min_salaire <= s['remuneration_brute'] <= max_salaire
+    ]
     
-    if scenarios_a_afficher is None:
-        print("Erreur: Impossible de trouver les scénarios correspondants", file=sys.stderr)
+    if not scenarios_a_afficher:
+        print("Erreur: Aucun scénario dans la plage spécifiée", file=sys.stderr)
         return 1
     
     # Affichage

@@ -69,12 +69,10 @@ class Microentreprise(OptimisationFiscale):
         resultats['ir_base'] = ir_base
         resultats['ir_detail'] = ir_detail
         
-        # Madelin en micro-entreprise (charge déductible personnelle)
-        madelin_charge = min(madelin_montant, PLAFOND_MADELIN_TNS)
-        resultats['madelin_charge'] = madelin_charge
-        
+        resultats['madelin_charge'] = 0
+        madelin_charge = 0
         # Net de base (avant PER/Girardin - sera recalculé dans la base)
-        net_avant_charges = chiffre_affaires - cotisations_sociales - ir_base - madelin_charge
+        net_avant_charges = chiffre_affaires - cotisations_sociales - ir_base
         resultats['net_avant_charges'] = net_avant_charges
         resultats['remuneration_nette_avant_ir'] = net_avant_charges  # Pour calcul final dans la base
         

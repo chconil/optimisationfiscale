@@ -60,10 +60,17 @@ L'application s'ouvrira automatiquement dans votre navigateur à l'adresse `http
 
 ```
 fiscalite/
-├── app.py              # Interface Streamlit
-├── calculs.py          # Moteur de calcul fiscal
-├── requirements.txt    # Dépendances Python
-└── README.md          # Documentation
+├── app.py                     # Interface Streamlit
+├── formes_juridiques.py       # Factory des formes juridiques
+├── fiscal_base.py             # Classe de base pour calculs
+├── fiscal_sarl.py             # Calculs SARL
+├── fiscal_sas.py              # Calculs SAS  
+├── fiscal_sarl_holding.py     # Calculs SARL + Holding
+├── fiscal_microentreprise.py  # Calculs micro-entreprise
+├── parametres_fiscaux.py      # Paramètres fiscaux 2024
+├── export_donnees.py          # Export CLI des données
+├── requirements.txt           # Dépendances Python
+└── README.md                  # Documentation
 ```
 
 ## 🔧 Paramètres par défaut
