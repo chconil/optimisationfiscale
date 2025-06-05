@@ -3,40 +3,71 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.subplots as sp
-from calculs import OptimisationRemunerationSARL
+from formes_juridiques import creer_optimiseur, FORMES_JURIDIQUES
+from calculs import OptimisationRemunerationSARL  # Garde la compatibilité
 
 def main():
     st.set_page_config(
-        page_title="Optimisation Fiscale SARL + Holding",
+        page_title="Optimisation Fiscale Multi-Formes",
         page_icon="💰",
         layout="wide",
         initial_sidebar_state="expanded"
     )
     
-    st.title("🎯 Optimisation Fiscale SARL + Holding")
+    st.title("🎯 Optimisation Fiscale Multi-Formes Juridiques")
     st.markdown("---")
     
     # Sidebar pour la configuration
     with st.sidebar:
         st.header("🔧 Configuration")
         
-        # Paramètres de base
-        st.subheader("📊 Paramètres de base")
-        resultat_initial = st.number_input(
-            "Résultat avant rémunération (€)",
-            min_value=0,
-            value=300000,
-            step=10000,
-            help="Résultat de votre SARL avant déduction de la rémunération de gérance"
+        # Sélection de la forme juridique
+        st.subheader("🏢 Forme Juridique")
+        forme_juridique = st.selectbox(
+            "Choisissez votre forme juridique",
+            FORMES_JURIDIQUES,
+            index=3,  # SARL + Holding par défaut pour compatibilité
+            help="Sélectionnez la forme juridique à optimiser"
         )
         
-        charges_existantes = st.number_input(
-            "Charges existantes (€)",
-            min_value=0,
-            value=50000,
-            step=5000,
-            help="Autres charges déjà déduites du résultat"
-        )
+        st.info(f"**Forme sélectionnée :** {forme_juridique}")
+        
+        # Paramètres de base
+        st.subheader("📊 Paramètres de base")
+        # Adapter l'interface selon la forme juridique
+        if forme_juridique == "Micro-entreprise":
+            resultat_initial = st.number_input(
+                "Chiffre d'affaires (€)",
+                min_value=0,
+                value=100000,
+                step=5000,
+                help="Chiffre d'affaires de votre micro-entreprise"
+            )
+            type_activite = st.selectbox(
+                "Type d'activité",
+                ["BIC", "BNC"],
+                help="BIC = Bénéfices Industriels et Commerciaux / BNC = Bénéfices Non Commerciaux"
+            )
+        else:
+            resultat_initial = st.number_input(
+                "Résultat avant rémunération (€)",
+                min_value=0,
+                value=300000,
+                step=10000,
+                help=f"Résultat de votre {forme_juridique} avant déduction de la rémunération"
+            )
+        
+        # Charges existantes sauf pour micro-entreprise
+        if forme_juridique != "Micro-entreprise":
+            charges_existantes = st.number_input(
+                "Charges existantes (€)",
+                min_value=0,
+                value=50000,
+                step=5000,
+                help="Autres charges déjà déduites du résultat"
+            )
+        else:
+            charges_existantes = 0
         
         parts_fiscales = st.number_input(
             "Nombre de parts fiscales",
@@ -46,58 +77,69 @@ def main():
             help="Votre nombre de parts fiscales pour le calcul de l'IR"
         )
         
+        # Créer l'optimiseur pour connaître les optimisations disponibles
+        optimiseur_temp = creer_optimiseur(forme_juridique, resultat_avant_remuneration=resultat_initial, 
+                                          charges_existantes=charges_existantes, parts_fiscales=parts_fiscales)
+        optimisations_disponibles = optimiseur_temp.get_optimisations_disponibles()
+        
         # Optimisations fiscales
         st.subheader("🎯 Optimisations Fiscales")
         
         st.markdown("**Cochez les optimisations que vous souhaitez activer :**")
         
-        # PER
-        use_per = st.checkbox(
-            "📈 Plan d'Épargne Retraite (PER)",
-            help="Déduction fiscale sur le revenu imposable (max 32,419€ en 2024)"
-        )
+        # PER (disponible pour tous sauf certains cas)
+        use_per = False
         per_max = 0
-        if use_per:
-            per_max = st.slider(
-                "Montant PER (€)",
-                min_value=0,
-                max_value=30000,
-                value=15000,
-                step=1000,
-                help="Plafond légal : 8 x PASS = 32,419€ en 2024"
+        if 'per' in optimisations_disponibles:
+            use_per = st.checkbox(
+                "📈 Plan d'Épargne Retraite (PER)",
+                help="Déduction fiscale sur le revenu imposable (max 32,419€ en 2024)"
             )
+            if use_per:
+                per_max = st.slider(
+                    "Montant PER (€)",
+                    min_value=0,
+                    max_value=30000,
+                    value=15000,
+                    step=1000,
+                    help="Plafond légal : 8 x PASS = 32,419€ en 2024"
+                )
         
-        # Madelin
-        use_madelin = st.checkbox(
-            "🏥 Contrat Madelin TNS",
-            help="Charge déductible de la SARL pour les TNS (max 84,000€ en 2024)"
-        )
+        # Madelin (seulement pour TNS)
+        use_madelin = False
         madelin_max = 0
-        if use_madelin:
-            madelin_max = st.slider(
-                "Montant Madelin (€)",
-                min_value=0,
-                max_value=35000,
-                value=5000,
-                step=500,
-                help="Plafond légal pour les charges Madelin TNS déductibles de la SARL"
+        if 'madelin' in optimisations_disponibles:
+            use_madelin = st.checkbox(
+                "🏥 Contrat Madelin TNS",
+                help="Charge déductible pour les TNS (max 84,000€ en 2024)"
             )
+            if use_madelin:
+                madelin_max = st.slider(
+                    "Montant Madelin (€)",
+                    min_value=0,
+                    max_value=35000,
+                    value=5000,
+                    step=500,
+                    help="Plafond légal pour les charges Madelin TNS déductibles"
+                )
         
-        # Girardin
-        use_girardin = st.checkbox(
-            "🏭 Girardin Industriel",
-            help="⚠️ ATTENTION : Il s'agit d'une DÉPENSE qui génère une réduction d'impôt"
-        )
+        # Girardin (pour les IR)
+        use_girardin = False
         girardin_max = 0
-        if use_girardin:
-            girardin_max = st.slider(
-                "Montant d'investissement Girardin (€)",
-                min_value=0,
-                max_value=40000,
-                value=20000,
-                step=1000,
-                help="Montant de l'investissement (dépense) qui génère la réduction d'impôt"
+        if 'girardin' in optimisations_disponibles:
+            use_girardin = st.checkbox(
+                "🏭 Girardin Industriel",
+                help="⚠️ ATTENTION : Il s'agit d'une DÉPENSE qui génère une réduction d'impôt"
             )
+            if use_girardin:
+                girardin_max = st.slider(
+                    "Montant d'investissement Girardin (€)",
+                    min_value=0,
+                    max_value=40000,
+                    value=20000,
+                    step=1000,
+                    help="Montant de l'investissement (dépense) qui génère la réduction d'impôt"
+                )
         
         # Paramètres de calcul
         st.subheader("⚙️ Paramètres de calcul")
@@ -117,21 +159,44 @@ def main():
         st.session_state.run_calculation = False
     
     if st.session_state.run_calculation:
-        # Initialisation de l'optimiseur
+        # Initialisation de l'optimiseur selon la forme juridique
         with st.spinner("🔄 Calcul en cours..."):
-            optimiseur = OptimisationRemunerationSARL(
+            optimiseur = creer_optimiseur(
+                forme_juridique,
                 resultat_avant_remuneration=resultat_initial,
                 charges_existantes=charges_existantes,
                 parts_fiscales=parts_fiscales
             )
             
-            # Optimisation (toujours avec la méthode niches, même si montants = 0)
-            meilleur_global, tous_scenarios_niches = optimiseur.optimiser_avec_niches(
-                pas=pas_calcul,
-                per_max=per_max if use_per else 0,
-                madelin_max=madelin_max if use_madelin else 0,
-                girardin_max=girardin_max if use_girardin else 0
-            )
+            # Optimisation selon la forme juridique
+            if forme_juridique == "Micro-entreprise":
+                meilleur_global, tous_scenarios = optimiseur.optimiser(
+                    type_activite=type_activite,
+                    pas=pas_calcul,
+                    per_max=per_max if use_per else 0
+                )
+                # Adapter format pour compatibilité
+                tous_scenarios_niches = [{'scenarios': tous_scenarios, 'meilleur': meilleur_global}]
+            elif forme_juridique == "SARL + Holding":
+                # Utiliser la méthode optimiser
+                meilleur_global, tous_scenarios = optimiseur.optimiser(
+                    pas=pas_calcul,
+                    per_max=per_max if use_per else 0,
+                    madelin_max=madelin_max if use_madelin else 0,
+                    girardin_max=girardin_max if use_girardin else 0
+                )
+                # Adapter format pour compatibilité
+                tous_scenarios_niches = tous_scenarios
+            else:
+                # Autres formes juridiques
+                meilleur_global, tous_scenarios = optimiseur.optimiser(
+                    pas=pas_calcul,
+                    per_max=per_max if use_per else 0,
+                    madelin_max=madelin_max if use_madelin else 0,
+                    girardin_max=girardin_max if use_girardin else 0
+                )
+                # Adapter format pour compatibilité
+                tous_scenarios_niches = [{'scenarios': tous_scenarios, 'meilleur': meilleur_global}]
             
             # Forcer l'utilisation des optimisations cochées par l'utilisateur
             meilleur_avec_niches = None
@@ -171,38 +236,88 @@ def main():
                         break
             
             # Scénario de référence sans optimisations pour comparaison
-            scenario_ref = optimiseur.calculer_scenario(meilleur_avec_niches['remuneration_brute'])
+            if forme_juridique == "Micro-entreprise":
+                scenario_ref = optimiseur.calculer_scenario(meilleur_avec_niches['chiffre_affaires'], type_activite)
+            elif forme_juridique == "SAS":
+                scenario_ref = optimiseur.calculer_scenario(meilleur_avec_niches['salaire_brut'])
+            else:
+                scenario_ref = optimiseur.calculer_scenario(meilleur_avec_niches.get('remuneration_brute', meilleur_avec_niches.get('salaire_brut', 0)))
             meilleur_classique = scenario_ref
         
         # Affichage des résultats
         col1, col2 = st.columns([1, 1])
         
         with col1:
-            st.subheader("🏆 Résultat Optimal")
+            st.subheader(f"🏆 Résultat Optimal - {forme_juridique}")
             
-            # Métriques principales
+            # Métriques principales adaptées selon la forme
+            net_key = 'net_final' if forme_juridique == "Micro-entreprise" else 'total_net'
+            net_optimal = meilleur_avec_niches.get(net_key, 0)
+            net_classique = meilleur_classique.get(net_key, 0)
+            
             st.metric(
                 "💰 Total Net Optimal",
-                f"{meilleur_avec_niches['total_net']:,.0f}€",
-                delta=f"+{meilleur_avec_niches['total_net'] - meilleur_classique['total_net']:,.0f}€"
+                f"{net_optimal:,.0f}€",
+                delta=f"+{net_optimal - net_classique:,.0f}€"
             )
             
             col_a, col_b, col_c = st.columns(3)
-            with col_a:
-                st.metric(
-                    "💼 Rémunération brute",
-                    f"{meilleur_avec_niches['remuneration_brute']:,.0f}€"
-                )
-            with col_b:
-                st.metric(
-                    "💎 Dividendes bruts",
-                    f"{meilleur_avec_niches['dividendes_sarl']:,.0f}€"
-                )
-            with col_c:
-                st.metric(
-                    "📉 Taux Prélèvement Global",
-                    f"{meilleur_avec_niches['taux_prelevement_global']:.1f}%"
-                )
+            
+            # Adapter les métriques selon la forme juridique
+            if forme_juridique == "Micro-entreprise":
+                with col_a:
+                    st.metric(
+                        "💼 CA optimal",
+                        f"{meilleur_avec_niches['chiffre_affaires']:,.0f}€"
+                    )
+                with col_b:
+                    st.metric(
+                        "🏥 Cotisations sociales",
+                        f"{meilleur_avec_niches['cotisations_sociales']:,.0f}€"
+                    )
+                with col_c:
+                    st.metric(
+                        "📉 Taux Prélèvement Global",
+                        f"{meilleur_avec_niches['taux_prelevement_global']:.1f}%"
+                    )
+            elif forme_juridique == "SAS":
+                with col_a:
+                    st.metric(
+                        "💼 Salaire brut",
+                        f"{meilleur_avec_niches['salaire_brut']:,.0f}€"
+                    )
+                with col_b:
+                    st.metric(
+                        "💎 Dividendes nets",
+                        f"{meilleur_avec_niches['dividendes_nets']:,.0f}€"
+                    )
+                with col_c:
+                    st.metric(
+                        "📉 Taux Prélèvement Global",
+                        f"{meilleur_avec_niches['taux_prelevement_global']:.1f}%"
+                    )
+            else:  # SARL et SARL + Holding
+                with col_a:
+                    st.metric(
+                        "💼 Rémunération brute",
+                        f"{meilleur_avec_niches.get('remuneration_brute', 0):,.0f}€"
+                    )
+                with col_b:
+                    if 'dividendes_sarl' in meilleur_avec_niches:
+                        st.metric(
+                            "💎 Dividendes bruts",
+                            f"{meilleur_avec_niches['dividendes_sarl']:,.0f}€"
+                        )
+                    else:
+                        st.metric(
+                            "💎 Dividendes nets",
+                            f"{meilleur_avec_niches.get('dividendes_nets', 0):,.0f}€"
+                        )
+                with col_c:
+                    st.metric(
+                        "📉 Taux Prélèvement Global",
+                        f"{meilleur_avec_niches['taux_prelevement_global']:.1f}%"
+                    )
             
             # Détail des optimisations
             if any(meilleur_avec_niches['optimisations'][k] > 0 for k in ['per', 'madelin', 'girardin']):

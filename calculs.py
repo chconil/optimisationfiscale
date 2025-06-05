@@ -3,32 +3,18 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import plotly.subplots as sp
 from plotly.offline import plot
+from abc import ABC, abstractmethod
 
-class OptimisationRemunerationSARL:
+class OptimisationFiscale(ABC):
+    """Classe de base pour tous les régimes fiscaux"""
+    
     def __init__(self, resultat_avant_remuneration=300000, charges_existantes=50000, parts_fiscales=1):
         self.resultat_initial = resultat_avant_remuneration
         self.charges = charges_existantes
         self.resultat_avant_remuneration = resultat_avant_remuneration - charges_existantes
         self.parts_fiscales = parts_fiscales
         
-        # Paramètres fiscaux 2024
-        self.taux_cotisations_tns = {
-            'maladie': 0.065,
-            'allocations_familiales': 0.031,
-            'retraite_base': 0.1775,
-            'retraite_complementaire': 0.07,
-            'invalidite_deces': 0.013,
-            'csg_crds': 0.097,
-            'formation': 0.0025
-        }
-        
-        # Tranches IS
-        self.tranches_is = [
-            {'limite': 42500, 'taux': 0.15},
-            {'limite': float('inf'), 'taux': 0.25}
-        ]
-        
-        # Barème IR 2024 (par part)
+        # Barème IR 2024 (par part) - commun à tous
         self.tranches_ir = [
             {'limite': 11294, 'taux': 0},
             {'limite': 28797, 'taux': 0.11},
@@ -37,48 +23,25 @@ class OptimisationRemunerationSARL:
             {'limite': float('inf'), 'taux': 0.45}
         ]
         
-        # Autres paramètres
+        # Tranches IS - communes
+        self.tranches_is = [
+            {'limite': 42500, 'taux': 0.15},
+            {'limite': float('inf'), 'taux': 0.25}
+        ]
+        
+        # Paramètres communs
         self.taux_flat_tax = 0.30
-        self.taux_exoneration_mere_fille = 0.95
-        self.abattement_frais_pro = 0.10  # 10% plafonné
-        self.plafond_abattement = 13522  # Pour 2024
+        self.taux_prelevements_sociaux_dividendes = 0.172
+        self.abattement_frais_pro = 0.10
+        self.plafond_abattement = 13522
         
         # Dispositifs d'optimisation fiscale
-        self.plafond_per = 32419  # PER 2024 (8 x PASS)
-        self.plafond_madelin = 84000  # Madelin TNS 2024
-        self.taux_girardin_industriel = 1.10  # 110% de réduction
-        #self.taux_girardin_logement = 1.18  # 118% de réduction sur 5 ans
-        
-    def calculer_cotisations_tns(self, remuneration_brute):
-        """Calcule les cotisations TNS sur la rémunération de gérance"""
-        # Assiette après abattement de 10% pour frais professionnels
-        assiette = remuneration_brute * 0.9
-        
-        cotisations = {}
-        total = 0
-        
-        # Calcul détaillé par cotisation
-        for nom, taux in self.taux_cotisations_tns.items():
-            if nom == 'retraite_base':
-                # Plafonnée à 1 PASS (46 368€ en 2024)
-                base = min(assiette, 46368)
-                cotisations[nom] = base * taux
-            elif nom == 'allocations_familiales':
-                # Taux réduit si < 3.5 PASS
-                if remuneration_brute < 162288:
-                    cotisations[nom] = assiette * taux
-                else:
-                    cotisations[nom] = assiette * 0.031
-            else:
-                cotisations[nom] = assiette * taux
-            
-            total += cotisations[nom]
-        
-        return total, cotisations
+        self.plafond_per = 32419
+        self.plafond_madelin = 84000
+        self.taux_girardin_industriel = 1.10
     
     def calculer_ir(self, revenu_net_imposable):
-        """Calcule l'IR selon le barème progressif"""
-        # Revenu imposable par part
+        """Calcule l'IR selon le barème progressif - commun à tous"""
         revenu_par_part = revenu_net_imposable / self.parts_fiscales
         
         ir_par_part = 0
@@ -111,13 +74,11 @@ class OptimisationRemunerationSARL:
             if tranche['limite'] == float('inf'):
                 break
         
-        # IR total
         ir_total = ir_par_part * self.parts_fiscales
-        
         return ir_total, details
     
     def calculer_is(self, benefice_imposable):
-        """Calcule l'IS selon les tranches"""
+        """Calcule l'IS selon les tranches - commun aux sociétés"""
         is_total = 0
         reste = benefice_imposable
         details = []
@@ -138,8 +99,78 @@ class OptimisationRemunerationSARL:
             })
             
             reste -= montant_tranche
-            
+        
         return is_total, details
+    
+    @abstractmethod
+    def calculer_scenario(self, remuneration, **kwargs):
+        """Méthode abstraite - chaque forme juridique doit l'implémenter"""
+        pass
+    
+    @abstractmethod
+    def optimiser(self, **kwargs):
+        """Méthode abstraite - chaque forme juridique doit l'implémenter"""
+        pass
+    
+    @abstractmethod
+    def get_nom_forme_juridique(self):
+        """Retourne le nom de la forme juridique"""
+        pass
+    
+    @abstractmethod
+    def get_optimisations_disponibles(self):
+        """Retourne la liste des optimisations disponibles pour cette forme"""
+        pass
+
+class OptimisationRemunerationSARL(OptimisationFiscale):
+    """Optimisation pour SARL seule (sans holding)"""
+    
+    def __init__(self, resultat_avant_remuneration=300000, charges_existantes=50000, parts_fiscales=1):
+        super().__init__(resultat_avant_remuneration, charges_existantes, parts_fiscales)
+        
+        # Paramètres spécifiques TNS
+        self.taux_cotisations_tns = {
+            'maladie': 0.065,
+            'allocations_familiales': 0.031,
+            'retraite_base': 0.1775,
+            'retraite_complementaire': 0.07,
+            'invalidite_deces': 0.013,
+            'csg_crds': 0.097,
+            'formation': 0.0025
+        }
+    
+    def get_nom_forme_juridique(self):
+        return "SARL"
+    
+    def get_optimisations_disponibles(self):
+        return ['per', 'madelin', 'girardin']
+        
+    def calculer_cotisations_tns(self, remuneration_brute):
+        """Calcule les cotisations TNS sur la rémunération de gérance"""
+        # Assiette après abattement de 10% pour frais professionnels
+        assiette = remuneration_brute * 0.9
+        
+        cotisations = {}
+        total = 0
+        
+        # Calcul détaillé par cotisation
+        for nom, taux in self.taux_cotisations_tns.items():
+            if nom == 'retraite_base':
+                # Plafonnée à 1 PASS (46 368€ en 2024)
+                base = min(assiette, 46368)
+                cotisations[nom] = base * taux
+            elif nom == 'allocations_familiales':
+                # Taux réduit si < 3.5 PASS
+                if remuneration_brute < 162288:
+                    cotisations[nom] = assiette * taux
+                else:
+                    cotisations[nom] = assiette * 0.031
+            else:
+                cotisations[nom] = assiette * taux
+            
+            total += cotisations[nom]
+        
+        return total, cotisations
     
     def calculer_scenario(self, remuneration_gerance, per_montant=0, madelin_montant=0, girardin_montant=0):
         """Calcule un scénario complet de rémunération"""
@@ -208,21 +239,31 @@ class OptimisationRemunerationSARL:
         resultats['is_detail'] = detail_is
         
         # 7. Dividendes distribuables
-        dividendes_sarl = resultat_apres_remuneration - is_total
-        resultats['dividendes_sarl'] = dividendes_sarl
+        dividendes_bruts = resultat_apres_remuneration - is_total
+        resultats['dividendes_bruts'] = dividendes_bruts
         
-        # 8. Remontée à la holding (régime mère-fille)
-        quote_part_imposable = dividendes_sarl * (1 - self.taux_exoneration_mere_fille)
-        is_holding = quote_part_imposable * 0.25
-        dividendes_holding = dividendes_sarl - is_holding
+        # 8. Distribution directe avec flat tax (pas de holding)
+        # Option flat tax 30% ou barème IR + prélèvements sociaux 17.2%
+        flat_tax = dividendes_bruts * self.taux_flat_tax
+        dividendes_nets = dividendes_bruts - flat_tax
         
-        resultats['quote_part_imposable'] = quote_part_imposable
-        resultats['is_holding'] = is_holding
-        resultats['dividendes_holding'] = dividendes_holding
+        # Calcul alternatif avec barème IR + prélèvements sociaux
+        prelevements_sociaux = dividendes_bruts * self.taux_prelevements_sociaux_dividendes
+        ir_dividendes, _ = self.calculer_ir(dividendes_bruts * 0.6)  # Abattement 40%
+        option_bareme = prelevements_sociaux + ir_dividendes
         
-        # 9. Distribution finale et flat tax
-        flat_tax = dividendes_holding * self.taux_flat_tax
-        dividendes_nets = dividendes_holding - flat_tax
+        # Choisir l'option la plus avantageuse
+        if option_bareme < flat_tax:
+            resultats['option_fiscale'] = 'barème'
+            resultats['prelevements_sociaux'] = prelevements_sociaux
+            resultats['ir_dividendes'] = ir_dividendes
+            resultats['flat_tax'] = 0
+            dividendes_nets = dividendes_bruts - option_bareme
+        else:
+            resultats['option_fiscale'] = 'flat_tax'
+            resultats['prelevements_sociaux'] = 0
+            resultats['ir_dividendes'] = 0
+            resultats['flat_tax'] = flat_tax
         
         resultats['flat_tax'] = flat_tax
         resultats['dividendes_nets'] = dividendes_nets
