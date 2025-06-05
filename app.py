@@ -30,8 +30,6 @@ def main():
             help="Sélectionnez la forme juridique à optimiser"
         )
         
-        st.info(f"**Forme sélectionnée :** {forme_juridique}")
-        
         # Paramètres de base
         st.subheader("📊 Paramètres de base")
         # Interface adaptée selon la forme juridique mais avec conservation des valeurs
@@ -106,72 +104,88 @@ def main():
                                           charges_existantes=charges_existantes, parts_fiscales=parts_fiscales)
         optimisations_disponibles = optimiseur_temp.get_optimisations_disponibles()
         
-        # Optimisations fiscales
-        st.subheader("🎯 Optimisations Fiscales")
-        
-        st.markdown("**Cochez les optimisations que vous souhaitez activer :**")
-        
-        # PER (disponible pour tous sauf certains cas)
-        use_per = False
-        per_max = 0
-        if 'per' in optimisations_disponibles:
-            use_per = st.checkbox(
-                "📈 Plan d'Épargne Retraite (PER)",
-                help="Déduction fiscale sur le revenu imposable (max 32,419€ en 2024)"
-            )
-            if use_per:
-                per_max = st.slider(
-                    "Montant PER (€)",
-                    min_value=0,
-                    max_value=30000,
-                    value=15000,
-                    step=1000,
-                    help="Plafond légal : 8 x PASS = 32,419€ en 2024"
+        # Optimisations fiscales - Niveau Entreprise
+        optimisations_entreprise = [opt for opt in optimisations_disponibles if opt in ['madelin', 'acre']]
+        if optimisations_entreprise:
+            st.subheader("🏢 Optimisations Niveau Entreprise")
+            st.markdown("*Déductions et réductions au niveau de l'entreprise*")
+            
+            # Madelin (seulement pour TNS)
+            use_madelin = False
+            madelin_max = 0
+            if 'madelin' in optimisations_disponibles:
+                use_madelin = st.checkbox(
+                    "🏥 Contrat Madelin TNS",
+                    help="Charge déductible pour les TNS (max 84,000€ en 2024)"
                 )
-        
-        # Madelin (seulement pour TNS)
-        use_madelin = False
-        madelin_max = 0
-        if 'madelin' in optimisations_disponibles:
-            use_madelin = st.checkbox(
-                "🏥 Contrat Madelin TNS",
-                help="Charge déductible pour les TNS (max 84,000€ en 2024)"
-            )
-            if use_madelin:
-                madelin_max = st.slider(
-                    "Montant Madelin (€)",
-                    min_value=0,
-                    max_value=35000,
-                    value=5000,
-                    step=500,
-                    help="Plafond légal pour les charges Madelin TNS déductibles"
+                if use_madelin:
+                    madelin_max = st.slider(
+                        "Montant Madelin (€)",
+                        min_value=0,
+                        max_value=35000,
+                        value=5000,
+                        step=500,
+                        help="Plafond légal pour les charges Madelin TNS déductibles"
+                    )
+            
+            # ACRE (pour micro-entreprise)
+            use_acre = False
+            if 'acre' in optimisations_disponibles:
+                use_acre = st.checkbox(
+                    "🎆 ACRE (Aide à la Création d'Entreprise)",
+                    help="Réduction de 50% des cotisations sociales la première année (sous conditions)"
                 )
+        else:
+            use_madelin = False
+            madelin_max = 0
+            use_acre = False
         
-        # ACRE (pour micro-entreprise)
-        use_acre = False
-        if 'acre' in optimisations_disponibles:
-            use_acre = st.checkbox(
-                "🎆 ACRE (Aide à la Création d'Entreprise)",
-                help="Réduction de 50% des cotisations sociales la première année (sous conditions)"
-            )
-        
-        # Girardin (pour les IR)
-        use_girardin = False
-        girardin_max = 0
-        if 'girardin' in optimisations_disponibles:
-            use_girardin = st.checkbox(
-                "🏭 Girardin Industriel",
-                help="⚠️ ATTENTION : Il s'agit d'une DÉPENSE qui génère une réduction d'impôt"
-            )
-            if use_girardin:
-                girardin_max = st.slider(
-                    "Montant d'investissement Girardin (€)",
-                    min_value=0,
-                    max_value=40000,
-                    value=20000,
-                    step=1000,
-                    help="Montant de l'investissement (dépense) qui génère la réduction d'impôt"
+        # Optimisations fiscales - Niveau IR Personnel
+        optimisations_ir = [opt for opt in optimisations_disponibles if opt in ['per', 'girardin']]
+        if optimisations_ir:
+            st.subheader("👤 Optimisations Niveau IR Personnel")
+            st.markdown("*Déductions et réductions d'impôt sur le revenu*")
+            
+            # PER (disponible pour tous sauf certains cas)
+            use_per = False
+            per_max = 0
+            if 'per' in optimisations_disponibles:
+                use_per = st.checkbox(
+                    "📈 Plan d'Épargne Retraite (PER)",
+                    help="Déduction fiscale sur le revenu imposable (max 32,419€ en 2024)"
                 )
+                if use_per:
+                    per_max = st.slider(
+                        "Montant PER (€)",
+                        min_value=0,
+                        max_value=30000,
+                        value=15000,
+                        step=1000,
+                        help="Plafond légal : 8 x PASS = 32,419€ en 2024"
+                    )
+            
+            # Girardin (pour les IR)
+            use_girardin = False
+            girardin_max = 0
+            if 'girardin' in optimisations_disponibles:
+                use_girardin = st.checkbox(
+                    "🏭 Girardin Industriel",
+                    help="⚠️ ATTENTION : Il s'agit d'une DÉPENSE qui génère une réduction d'impôt"
+                )
+                if use_girardin:
+                    girardin_max = st.slider(
+                        "Montant d'investissement Girardin (€)",
+                        min_value=0,
+                        max_value=40000,
+                        value=20000,
+                        step=1000,
+                        help="Montant de l'investissement (dépense) qui génère la réduction d'impôt"
+                    )
+        else:
+            use_per = False
+            per_max = 0
+            use_girardin = False
+            girardin_max = 0
         
         # Paramètres de calcul
         st.subheader("⚙️ Paramètres de calcul")
@@ -337,18 +351,36 @@ def main():
             if any(optimisations.get(k, 0) > 0 or optimisations.get(k, False) for k in ['per', 'madelin', 'girardin', 'acre']):
                 st.subheader("🎯 Optimisations Utilisées")
                 
-                if optimisations.get('per', 0) > 0:
-                    st.info(f"📈 PER : {optimisations['per']:,.0f}€")
-                
+                # Optimisations niveau entreprise
+                optimisations_entreprise_utilisees = []
                 if optimisations.get('madelin', 0) > 0:
-                    st.info(f"🏥 Madelin (charge déductible) : {optimisations['madelin']:,.0f}€")
+                    optimisations_entreprise_utilisees.append(f"🏥 Madelin (charge déductible) : {optimisations['madelin']:,.0f}€")
                 
                 if optimisations.get('acre', False):
                     acre_economie = meilleur_avec_niches.get('acre_reduction', 0)
-                    st.success(f"🎆 ACRE : -50% cotisations (économie {acre_economie:,.0f}€)")
+                    optimisations_entreprise_utilisees.append(f"🎆 ACRE : -50% cotisations (économie {acre_economie:,.0f}€)")
+                
+                if optimisations_entreprise_utilisees:
+                    st.markdown("**🏢 Niveau Entreprise :**")
+                    for opt in optimisations_entreprise_utilisees:
+                        st.info(opt)
+                
+                # Optimisations niveau IR personnel
+                optimisations_ir_utilisees = []
+                if optimisations.get('per', 0) > 0:
+                    optimisations_ir_utilisees.append(f"📈 PER (déduction IR) : {optimisations['per']:,.0f}€")
                 
                 if optimisations.get('girardin', 0) > 0:
-                    st.error(f"🏭 Girardin : {optimisations['girardin']:,.0f}€")
+                    reduction_girardin = meilleur_avec_niches.get('reduction_girardin', 0)
+                    optimisations_ir_utilisees.append(f"🏭 Girardin (réduction IR) : {optimisations['girardin']:,.0f}€ → -{reduction_girardin:,.0f}€ d'IR")
+                
+                if optimisations_ir_utilisees:
+                    st.markdown("**👤 Niveau IR Personnel :**")
+                    for opt in optimisations_ir_utilisees:
+                        if "Girardin" in opt:
+                            st.error(opt)  # En rouge car c'est une dépense
+                        else:
+                            st.info(opt)
                 
                 st.success(f"💰 Économies totales : {optimisations.get('economies_totales', 0):,.0f}€")
         
@@ -539,27 +571,15 @@ def main():
                 **Revenu imposable final :** {meilleur_avec_niches.get('revenu_imposable_final', meilleur_avec_niches['revenu_imposable']):,.0f}€  
                 """)
             
-            if forme_juridique == "SAS":
-                # Pour la SAS, toujours afficher l'IR avant Girardin
-                if ir_detail_str.strip():
-                    with st.expander(f"**IR avant Girardin :** {meilleur_avec_niches.get('ir_avant_girardin', meilleur_avec_niches['ir_remuneration']):,.0f}€  "):
-                        st.markdown(ir_detail_str)
-                else:
-                    st.markdown(f"**IR avant Girardin :** {meilleur_avec_niches.get('ir_avant_girardin', meilleur_avec_niches['ir_remuneration']):,.0f}€  ")
-                
-                st.markdown(f"""
-                **Réduction Girardin :** {meilleur_avec_niches.get('reduction_girardin', 0):,.0f}€  
-                **IR final :** {meilleur_avec_niches['ir_remuneration']:,.0f}€  
-                """)
+            if ir_detail_str.strip():
+                with st.expander(f"**IR :** {meilleur_avec_niches.get('ir_avant_girardin', meilleur_avec_niches['ir_remuneration']):,.0f}€  "):
+                    st.markdown(ir_detail_str)
             else:
-                # Pour les autres formes, comportement normal
-                if ir_detail_str.strip():
-                    with st.expander(f"**IR avant Girardin :** {meilleur_avec_niches.get('ir_avant_girardin', meilleur_avec_niches['ir_remuneration']):,.0f}€  "):
-                        st.markdown(ir_detail_str)
-                
-                st.markdown(f"""
-                **Réduction Girardin :** {meilleur_avec_niches.get('reduction_girardin', 0):,.0f}€  
-                **IR final :** {meilleur_avec_niches['ir_remuneration']:,.0f}€  
+                st.markdown(f"**IR avant Girardin :** {meilleur_avec_niches.get('ir_avant_girardin', meilleur_avec_niches['ir_remuneration']):,.0f}€  ")
+            
+            st.markdown(f"""
+            **Réduction Girardin :** {meilleur_avec_niches.get('reduction_girardin', 0):,.0f}€  
+            **IR final :** {meilleur_avec_niches['ir_remuneration']:,.0f}€  
             """)
             
             if forme_juridique == "SAS":

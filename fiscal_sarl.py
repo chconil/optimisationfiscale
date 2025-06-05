@@ -9,11 +9,10 @@ from parametres_fiscaux import *
 class SARL(OptimisationFiscale):
     """Optimisation pour SARL seule (sans holding)"""
     
-    def __init__(self, resultat_avant_remuneration=300000, charges_existantes=50000, parts_fiscales=1):
-        super().__init__(resultat_avant_remuneration, charges_existantes, parts_fiscales)
-        
-        # Utilise les paramètres centralisés
-        pass
+    def __init__(self, resultat_avant_remuneration=300000, charges_existantes=50000, parts_fiscales=1,
+                 per_max=None, madelin_max=None, girardin_max=None):
+        super().__init__(resultat_avant_remuneration, charges_existantes, parts_fiscales,
+                         per_max, madelin_max, girardin_max)
     
     def get_nom_forme_juridique(self):
         return "SARL"
@@ -62,9 +61,10 @@ class SARL(OptimisationFiscale):
         resultats['ir_detail'] = ir_detail
         resultats['remuneration_nette_apres_ir'] = remuneration_gerance - ir_final
         
-        # 5. Madelin (charge déductible)
+        # 5. Madelin (charge déductible du résultat avant rémunération)
         madelin_charge = min(madelin_montant, PLAFOND_MADELIN_TNS)
-        resultat_apres_remuneration = self.resultat_avant_remuneration - remuneration_gerance - cotisations_tns - madelin_charge
+        self.resultat_avant_remuneration = self.resultat_avant_remuneration - madelin_charge
+        resultat_apres_remuneration = self.resultat_avant_remuneration - remuneration_gerance - cotisations_tns
         resultats['madelin_charge'] = madelin_charge
         resultats['resultat_apres_remuneration'] = resultat_apres_remuneration
         
@@ -133,49 +133,3 @@ class SARL(OptimisationFiscale):
         
         return resultats
     
-    def optimiser(self, pas=5000, per_max=None, madelin_max=None, girardin_max=None, **kwargs):
-        """Optimise la SARL"""
-        if per_max is None:
-            per_max = PLAFOND_PER
-        if madelin_max is None:
-            madelin_max = PLAFOND_MADELIN_TNS
-        if girardin_max is None:
-            girardin_max = 50000
-        
-        meilleur_scenario = None
-        tous_scenarios = []
-        
-        # Test différentes optimisations
-        optimisations_a_tester = [
-            {'per': 0, 'madelin': 0, 'girardin': 0},
-            {'per': per_max, 'madelin': 0, 'girardin': 0},
-            {'per': 0, 'madelin': madelin_max, 'girardin': 0},
-            {'per': 0, 'madelin': 0, 'girardin': girardin_max},
-            {'per': per_max, 'madelin': madelin_max, 'girardin': 0},
-            {'per': per_max, 'madelin': 0, 'girardin': girardin_max},
-            {'per': 0, 'madelin': madelin_max, 'girardin': girardin_max},
-            {'per': per_max, 'madelin': madelin_max, 'girardin': girardin_max}
-        ]
-        
-        for optimisations in optimisations_a_tester:
-            scenarios_optim = []
-            
-            for remuneration in range(0, self.resultat_avant_remuneration, pas):
-                scenario = self.calculer_scenario(
-                    remuneration,
-                    per_montant=optimisations['per'],
-                    madelin_montant=optimisations['madelin'],
-                    girardin_montant=optimisations['girardin']
-                )
-                
-                if scenario.get('total_net', 0) > 0:
-                    scenarios_optim.append(scenario)
-            
-            if scenarios_optim:
-                meilleur_optim = max(scenarios_optim, key=lambda x: x['total_net'])
-                tous_scenarios.extend(scenarios_optim)
-                
-                if meilleur_scenario is None or meilleur_optim['total_net'] > meilleur_scenario['total_net']:
-                    meilleur_scenario = meilleur_optim
-        
-        return meilleur_scenario, tous_scenarios

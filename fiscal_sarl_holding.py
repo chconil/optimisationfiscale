@@ -9,14 +9,10 @@ from parametres_fiscaux import *
 class SARLHolding(OptimisationFiscale):
     """Optimisation pour SARL + Holding (code existant adapté)"""
     
-    def __init__(self, resultat_avant_remuneration=300000, charges_existantes=50000, parts_fiscales=1):
-        super().__init__(resultat_avant_remuneration, charges_existantes, parts_fiscales)
-        
-        # Utilise les paramètres centralisés
-        pass
-        
-        # Utilise les paramètres centralisés
-        pass
+    def __init__(self, resultat_avant_remuneration=300000, charges_existantes=50000, parts_fiscales=1,
+                 per_max=None, madelin_max=None, girardin_max=None):
+        super().__init__(resultat_avant_remuneration, charges_existantes, parts_fiscales,
+                         per_max, madelin_max, girardin_max)
     
     def get_nom_forme_juridique(self):
         return "SARL + Holding"
@@ -137,57 +133,6 @@ class SARLHolding(OptimisationFiscale):
         
         return resultats
     
-    def optimiser(self, pas=5000, per_max=None, madelin_max=None, girardin_max=None, **kwargs):
-        """Optimise SARL + Holding (reprise méthode existante)"""
-        if per_max is None:
-            per_max = PLAFOND_PER
-        if madelin_max is None:
-            madelin_max = PLAFOND_MADELIN_TNS
-        if girardin_max is None:
-            girardin_max = 50000
-        
-        meilleur_scenario = None
-        meilleur_efficacite = 0
-        tous_scenarios = []
-        
-        # Test différentes combinaisons d'optimisations
-        optimisations_a_tester = [
-            {'per': 0, 'madelin': 0, 'girardin': 0},  # Sans optimisation
-            {'per': per_max, 'madelin': 0, 'girardin': 0},  # PER seul
-            {'per': 0, 'madelin': madelin_max, 'girardin': 0},  # Madelin seul
-            {'per': 0, 'madelin': 0, 'girardin': girardin_max},  # Girardin seul
-            {'per': per_max, 'madelin': madelin_max, 'girardin': 0},  # PER + Madelin
-            {'per': per_max, 'madelin': 0, 'girardin': girardin_max},  # PER + Girardin
-            {'per': 0, 'madelin': madelin_max, 'girardin': girardin_max},  # Madelin + Girardin
-            {'per': per_max, 'madelin': madelin_max, 'girardin': girardin_max},  # Tout
-        ]
-        
-        for optimisations in optimisations_a_tester:
-            scenarios_optim = []
-            
-            for remuneration in range(0, self.resultat_avant_remuneration + 1, pas):
-                scenario = self.calculer_scenario(
-                    remuneration, 
-                    per_montant=optimisations['per'],
-                    madelin_montant=optimisations['madelin'],
-                    girardin_montant=optimisations['girardin']
-                )
-                
-                # Ne pas inclure les scénarios non plausibles (dividendes négatifs)
-                if scenario['flat_tax'] >= 0:
-                    scenario['nom_strategie'] = f"PER:{optimisations['per']:,}€ | Madelin:{optimisations['madelin']:,}€ | Girardin:{optimisations['girardin']:,}€"
-                    scenarios_optim.append(scenario)
-            
-            # Mise à jour du meilleur scénario global basé sur le total net
-            for scenario in scenarios_optim:
-                if scenario['total_net'] > meilleur_efficacite:
-                    meilleur_efficacite = scenario['total_net']
-                    meilleur_scenario = scenario
-            
-            tous_scenarios.append({
-                'optimisations': optimisations,
-                'scenarios': scenarios_optim,
-                'meilleur': max(scenarios_optim, key=lambda x: x['total_net']) if scenarios_optim else None
-            })
-        
-        return meilleur_scenario, tous_scenarios
+    def is_scenario_valid(self, scenario):
+        """Pour SARL + Holding, vérifie que les dividendes ne sont pas négatifs"""
+        return scenario.get('flat_tax', -1) >= 0

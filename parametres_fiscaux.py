@@ -86,7 +86,7 @@ TAUX_REDUCTION_ACRE = 0.50  # 50% de réduction des cotisations sociales la 1èr
 # Configuration par forme juridique
 FORMES_JURIDIQUES_CONFIG = {
     'Micro-entreprise': {
-        'optimisations_disponibles': ['per', 'madelin', 'acre'],
+        'optimisations_disponibles': ['per', 'girardin', 'acre'],
         'calcul_cotisations': 'micro',
         'type_revenus': 'ca'
     },

@@ -9,11 +9,10 @@ from parametres_fiscaux import *
 class Microentreprise(OptimisationFiscale):
     """Optimisation pour micro-entreprise"""
     
-    def __init__(self, resultat_avant_remuneration=300000, charges_existantes=0, parts_fiscales=1):
-        super().__init__(resultat_avant_remuneration, charges_existantes, parts_fiscales)
-        
-        # Utilise les paramètres centralisés
-        pass
+    def __init__(self, resultat_avant_remuneration=300000, charges_existantes=0, parts_fiscales=1,
+                 per_max=None, madelin_max=None, girardin_max=None):
+        super().__init__(resultat_avant_remuneration, charges_existantes, parts_fiscales,
+                         per_max, madelin_max, girardin_max)
     
     def get_nom_forme_juridique(self):
         return "Micro-entreprise"
@@ -126,50 +125,14 @@ class Microentreprise(OptimisationFiscale):
         
         return resultats
     
-    def optimiser(self, type_activite='BIC - Prestations de services', pas=5000, per_max=None, madelin_max=None, acre=False, **kwargs):
-        """Optimise le CA pour la micro-entreprise"""
-        if per_max is None:
-            per_max = PLAFOND_PER
-        if madelin_max is None:
-            madelin_max = PLAFOND_MADELIN_TNS
-        
-        # Pour la micro : on optimise les dispositifs sur le CA donné, pas le CA lui-même
-        ca = self.resultat_initial  # Le CA est déjà fixé
-        
-        meilleur_scenario = None
-        tous_scenarios = []
-        
-        # Test différentes combinaisons d'optimisations
-        optimisations_a_tester = [
-            {'per': 0, 'madelin': 0, 'acre': False},
-            {'per': per_max, 'madelin': 0, 'acre': False},
-            {'per': 0, 'madelin': madelin_max, 'acre': False},
-            {'per': per_max, 'madelin': madelin_max, 'acre': False}
-        ]
-        
-        # Si ACRE est disponible, tester aussi avec ACRE
-        if acre:
-            optimisations_avec_acre = [
-                {'per': 0, 'madelin': 0, 'acre': True},
-                {'per': per_max, 'madelin': 0, 'acre': True},
-                {'per': 0, 'madelin': madelin_max, 'acre': True},
-                {'per': per_max, 'madelin': madelin_max, 'acre': True}
-            ]
-            optimisations_a_tester.extend(optimisations_avec_acre)
-        
-        for optimisations in optimisations_a_tester:
-            scenario = self.calculer_scenario(
-                ca, 
-                type_activite, 
-                per_montant=optimisations['per'],
-                madelin_montant=optimisations['madelin'],
-                acre=optimisations['acre']
-            )
-            
-            if 'erreur' not in scenario:
-                tous_scenarios.append(scenario)
-                
-                if meilleur_scenario is None or scenario['net_final'] > meilleur_scenario['net_final']:
-                    meilleur_scenario = scenario
-        
-        return meilleur_scenario, tous_scenarios
+    def get_range_remuneration(self, pas=5000):
+        """Pour micro-entreprise, on optimise sur le CA fixé (pas de plage)"""
+        return [self.resultat_initial]  # CA fixé
+    
+    def get_metric_for_optimization(self, scenario):
+        """Pour micro-entreprise, optimise sur net_final"""
+        return scenario.get('net_final', 0)
+    
+    def is_scenario_valid(self, scenario):
+        """Pour micro-entreprise, vérifie qu'il n'y a pas d'erreur"""
+        return 'erreur' not in scenario
