@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -190,13 +190,13 @@ def main():
             col_a, col_b, col_c = st.columns(3)
             with col_a:
                 st.metric(
-                    "💼 Rémunération Optimale",
+                    "💼 Rémunération brute",
                     f"{meilleur_avec_niches['remuneration_brute']:,.0f}€"
                 )
             with col_b:
                 st.metric(
-                    "💎 Dividendes",
-                    f"{meilleur_avec_niches['dividendes_nets']:,.0f}€"
+                    "💎 Dividendes bruts",
+                    f"{meilleur_avec_niches['dividendes_sarl']:,.0f}€"
                 )
             with col_c:
                 st.metric(
@@ -266,7 +266,8 @@ def main():
                 'csg_crds': 'CSG/CRDS',
                 'formation': 'Formation'
             }.get(nom, nom)
-            cotisations_detail_str += f"  • {nom_affiche} : {montant:,.0f}€  \n"
+            taux = optimiseur.taux_cotisations_tns.get(nom, 0) * 100
+            cotisations_detail_str += f"  • {nom_affiche} ({taux:.2f}%) : {montant:,.0f}€  \n"
         
         # Préparer les détails IS
         is_detail_str = ""
@@ -287,20 +288,19 @@ def main():
             **Résultat avant rémun. :** {resultat_initial - charges_existantes:,.0f}€  
             
             **Rémunération brute :** {meilleur_avec_niches['remuneration_brute']:,.0f}€  
-            **Cotisations TNS :** {meilleur_avec_niches['cotisations_tns']:,.0f}€  
+            
             """)
             
-            with st.expander("📊 Détail cotisations TNS"):
+            with st.expander(f"**Cotisations TNS :** {meilleur_avec_niches['cotisations_tns']:,.0f}€  "):
                 st.markdown(cotisations_detail_str)
             
             st.markdown(f"""
             **Charge Madelin :** {meilleur_avec_niches.get('madelin_charge', 0):,.0f}€  
             **Résultat après rémun. :** {meilleur_avec_niches['resultat_apres_remuneration']:,.0f}€  
             
-            **IS SARL :** {meilleur_avec_niches['is_sarl']:,.0f}€  
             """)
             
-            with st.expander("📊 Détail tranches IS"):
+            with st.expander(f"**IS SARL :** {meilleur_avec_niches['is_sarl']:,.0f}€  "):
                 st.markdown(is_detail_str)
             
             st.markdown(f"**Dividendes SARL :** {meilleur_avec_niches['dividendes_sarl']:,.0f}€")
@@ -315,12 +315,10 @@ def main():
             **Déductions fiscales :**  
             • PER : {meilleur_avec_niches.get('per_deduction', 0):,.0f}€  
             **Revenu imposable final :** {meilleur_avec_niches.get('revenu_imposable_final', meilleur_avec_niches['revenu_imposable']):,.0f}€  
-            
-            **IR avant Girardin :** {meilleur_avec_niches.get('ir_avant_girardin', meilleur_avec_niches['ir_remuneration']):,.0f}€  
             """)
             
             if ir_detail_str.strip():
-                with st.expander("📊 Détail tranches IR"):
+                with st.expander(f"**IR avant Girardin :** {meilleur_avec_niches.get('ir_avant_girardin', meilleur_avec_niches['ir_remuneration']):,.0f}€  "):
                     st.markdown(ir_detail_str)
             
             st.markdown(f"""
@@ -450,8 +448,8 @@ def main():
                 "IS Holding": st.column_config.NumberColumn("IS Holding", format="€%.0f"),
                 "Flat Tax": st.column_config.NumberColumn("Flat Tax", format="€%.0f"),
                 "Total Prélèvements": st.column_config.NumberColumn("Total Prélèvements", format="€%.0f"),
-                "Taux Prélèvement (%)": st.column_config.NumberColumn("Taux Prélèvement (%)", format="%.1f%%"),
-                "Vérification": st.column_config.NumberColumn("Vérification", format="€%.0f")
+                "Net Disponible": st.column_config.NumberColumn("Net Disponible", format="€%.2f"),
+                "Taux Prélèvement (%)": st.column_config.NumberColumn("Taux Prélèvement (%)", format="%.2f%%")
             }
         )
         
@@ -487,7 +485,6 @@ def create_scenarios_dataframe(scenarios):
             'Flat Tax': s['flat_tax'],
             'Total Prélèvements': total_cotisations,
             'Net Disponible': net_disponible,
-            'Vérification': verification_somme,
             'Taux Prélèvement (%)': s['taux_prelevement_global']
         }
         data.append(row)
