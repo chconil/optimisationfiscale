@@ -293,6 +293,7 @@ class SAS(OptimisationFiscale):
         resultats = {'forme_juridique': 'SAS'}
         
         resultats['salaire_brut'] = salaire_brut
+        resultats['remuneration_brute'] = salaire_brut  # Alias pour compatibilité avec l'interface
         
         # Cotisations
         cotisations_salariales = salaire_brut * TAUX_COTISATIONS_SALARIE
@@ -329,11 +330,14 @@ class SAS(OptimisationFiscale):
         resultats['ir_avant_girardin'] = ir_avant_girardin
         resultats['reduction_girardin'] = reduction_girardin
         resultats['ir_final'] = ir_final
+        resultats['ir_remuneration'] = ir_final  # Alias pour compatibilité avec l'interface
         resultats['ir_detail'] = ir_detail
         
         # Salaire net final
         salaire_net_final = salaire_net_avant_ir - ir_final
         resultats['salaire_net_final'] = salaire_net_final
+        resultats['remuneration_nette_avant_ir'] = salaire_net_avant_ir  # Alias pour compatibilité
+        resultats['remuneration_nette_apres_ir'] = salaire_net_final  # Alias pour compatibilité
         
         # Résultat après charges sociales et salaires
         resultat_apres_salaire = self.resultat_avant_remuneration - cout_total_salaire
@@ -342,11 +346,13 @@ class SAS(OptimisationFiscale):
         # IS
         is_total, is_detail = self.calculer_is(resultat_apres_salaire)
         resultats['is_total'] = is_total
+        resultats['is_sarl'] = is_total  # Alias pour compatibilité avec l'interface
         resultats['is_detail'] = is_detail
         
         # Dividendes
         dividendes_bruts = resultat_apres_salaire - is_total
         resultats['dividendes_bruts'] = dividendes_bruts
+        resultats['dividendes_sarl'] = dividendes_bruts  # Alias pour compatibilité
         
         # Flat tax sur dividendes
         flat_tax = dividendes_bruts * TAUX_FLAT_TAX
@@ -361,6 +367,22 @@ class SAS(OptimisationFiscale):
         # Taux de prélèvement global
         total_prelevements = (self.resultat_avant_remuneration - total_net)
         resultats['taux_prelevement_global'] = (total_prelevements / self.resultat_avant_remuneration * 100) if self.resultat_avant_remuneration > 0 else 0
+        
+        # Calcul du taux de prélèvement sur les dividendes
+        if resultat_apres_salaire > 0:
+            taux_prelevement_dividendes = (is_total + flat_tax) / resultat_apres_salaire * 100
+        else:
+            taux_prelevement_dividendes = 0
+        
+        # Ajouter les champs manquants pour compatibilité avec l'interface SARL
+        resultats['cotisations_tns'] = 0  # Pas de cotisations TNS en SAS
+        resultats['cotisations_detail'] = {}  # Pas de détail TNS
+        resultats['resultat_apres_remuneration'] = resultat_apres_salaire  # Alias
+        resultats['madelin_charge'] = 0  # Pas de Madelin en SAS
+        resultats['is_holding'] = 0  # Pas de holding
+        resultats['quote_part_imposable'] = 0  # Pas de quote-part en SAS simple
+        resultats['dividendes_holding'] = dividendes_nets  # Alias pour dividendes finaux
+        resultats['taux_prelevement_dividendes'] = taux_prelevement_dividendes
         
         resultats['optimisations'] = {
             'per': per_montant,
@@ -465,6 +487,7 @@ class SARL(OptimisationFiscale):
         resultats['ir_avant_girardin'] = ir_avant_girardin
         resultats['reduction_girardin'] = reduction_girardin
         resultats['ir_final'] = ir_final
+        resultats['ir_remuneration'] = ir_final  # Alias pour compatibilité avec l'interface
         resultats['ir_detail'] = ir_detail
         resultats['remuneration_nette_apres_ir'] = remuneration_gerance - ir_final
         
@@ -477,11 +500,13 @@ class SARL(OptimisationFiscale):
         # 6. IS
         is_total, is_detail = self.calculer_is(resultat_apres_remuneration)
         resultats['is_total'] = is_total
+        resultats['is_sarl'] = is_total  # Alias pour compatibilité avec l'interface
         resultats['is_detail'] = is_detail
         
         # 7. Dividendes
         dividendes_bruts = resultat_apres_remuneration - is_total
         resultats['dividendes_bruts'] = dividendes_bruts
+        resultats['dividendes_sarl'] = dividendes_bruts  # Alias pour compatibilité
         
         # 8. Imposition dividendes - choisir entre flat tax et barème
         flat_tax = dividendes_bruts * TAUX_FLAT_TAX
@@ -511,6 +536,22 @@ class SARL(OptimisationFiscale):
         # 10. Taux de prélèvement global
         total_prelevements = self.resultat_avant_remuneration - total_net
         resultats['taux_prelevement_global'] = (total_prelevements / self.resultat_avant_remuneration * 100) if self.resultat_avant_remuneration > 0 else 0
+        
+        # Calcul du taux de prélèvement sur les dividendes
+        if resultat_apres_remuneration > 0:
+            if resultats['option_fiscale'] == 'flat_tax':
+                prelevements_dividendes = is_total + flat_tax
+            else:
+                prelevements_dividendes = is_total + prelevements_sociaux + ir_dividendes
+            taux_prelevement_dividendes = (prelevements_dividendes / resultat_apres_remuneration) * 100
+        else:
+            taux_prelevement_dividendes = 0
+        
+        # Ajouter les champs manquants pour compatibilité avec l'interface holding
+        resultats['is_holding'] = 0  # Pas de holding en SARL simple
+        resultats['quote_part_imposable'] = 0  # Pas de quote-part en SARL simple
+        resultats['dividendes_holding'] = dividendes_nets  # Alias pour dividendes finaux
+        resultats['taux_prelevement_dividendes'] = taux_prelevement_dividendes
         
         resultats['optimisations'] = {
             'per': per_montant,
