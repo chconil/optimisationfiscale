@@ -320,19 +320,20 @@ def main():
                     )
             
             # Détail des optimisations
-            if any(meilleur_avec_niches['optimisations'][k] > 0 for k in ['per', 'madelin', 'girardin']):
+            optimisations = meilleur_avec_niches.get('optimisations', {})
+            if any(optimisations.get(k, 0) > 0 for k in ['per', 'madelin', 'girardin']):
                 st.subheader("🎯 Optimisations Utilisées")
                 
-                if meilleur_avec_niches['optimisations']['per'] > 0:
-                    st.info(f"📈 PER : {meilleur_avec_niches['optimisations']['per']:,.0f}€")
+                if optimisations.get('per', 0) > 0:
+                    st.info(f"📈 PER : {optimisations['per']:,.0f}€")
                 
-                if meilleur_avec_niches['optimisations']['madelin'] > 0:
-                    st.info(f"🏥 Madelin (charge SARL) : {meilleur_avec_niches['optimisations']['madelin']:,.0f}€")
+                if optimisations.get('madelin', 0) > 0:
+                    st.info(f"🏥 Madelin (charge déductible) : {optimisations['madelin']:,.0f}€")
                 
-                if meilleur_avec_niches['optimisations']['girardin'] > 0:
-                    st.error(f"🏭 Girardin : {meilleur_avec_niches['optimisations']['girardin']:,.0f}€")
+                if optimisations.get('girardin', 0) > 0:
+                    st.error(f"🏭 Girardin : {optimisations['girardin']:,.0f}€")
                 
-                st.success(f"💰 Économies totales : {meilleur_avec_niches['optimisations']['economies_totales']:,.0f}€")
+                st.success(f"💰 Économies totales : {optimisations.get('economies_totales', 0):,.0f}€")
         
         with col2:
             st.subheader("📊 Répartition du Revenu")

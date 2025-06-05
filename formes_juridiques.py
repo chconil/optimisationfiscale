@@ -4,6 +4,7 @@ Définition des différentes formes juridiques et leurs calculs fiscaux
 
 import numpy as np
 from abc import ABC, abstractmethod
+from parametres_fiscaux import *
 
 class OptimisationFiscale(ABC):
     """Classe de base pour tous les régimes fiscaux"""
@@ -13,32 +14,6 @@ class OptimisationFiscale(ABC):
         self.charges = charges_existantes
         self.resultat_avant_remuneration = resultat_avant_remuneration - charges_existantes
         self.parts_fiscales = parts_fiscales
-        
-        # Barème IR 2024 (par part) - commun à tous
-        self.tranches_ir = [
-            {'limite': 11294, 'taux': 0},
-            {'limite': 28797, 'taux': 0.11},
-            {'limite': 82341, 'taux': 0.30},
-            {'limite': 177106, 'taux': 0.41},
-            {'limite': float('inf'), 'taux': 0.45}
-        ]
-        
-        # Tranches IS - communes aux sociétés
-        self.tranches_is = [
-            {'limite': 42500, 'taux': 0.15},
-            {'limite': float('inf'), 'taux': 0.25}
-        ]
-        
-        # Paramètres communs
-        self.taux_flat_tax = 0.30
-        self.taux_prelevements_sociaux_dividendes = 0.172
-        self.abattement_frais_pro = 0.10
-        self.plafond_abattement = 13522
-        
-        # Dispositifs d'optimisation fiscale
-        self.plafond_per = 32419
-        self.plafond_madelin = 84000
-        self.taux_girardin_industriel = 1.10
     
     def calculer_ir(self, revenu_net_imposable):
         """Calcule l'IR selon le barème progressif - commun à tous"""
@@ -52,7 +27,7 @@ class OptimisationFiscale(ABC):
         details = []
         tranche_precedente = 0
         
-        for tranche in self.tranches_ir:
+        for tranche in TRANCHES_IR:
             if revenu_restant <= 0:
                 break
             
@@ -89,7 +64,7 @@ class OptimisationFiscale(ABC):
         reste = benefice_imposable
         details = []
         
-        for tranche in self.tranches_is:
+        for tranche in TRANCHES_IS:
             if reste <= 0:
                 break
             
@@ -135,28 +110,22 @@ class Microentreprise(OptimisationFiscale):
     def __init__(self, resultat_avant_remuneration=300000, charges_existantes=0, parts_fiscales=1):
         super().__init__(resultat_avant_remuneration, charges_existantes, parts_fiscales)
         
-        # Spécifique micro-entreprise
-        self.abattement_micro_bic = 0.71  # 71% d'abattement
-        self.abattement_micro_bnc = 0.34  # 34% d'abattement
-        self.taux_cotisations_micro_bic = 0.126  # 12.6% pour BIC
-        self.taux_cotisations_micro_bnc = 0.218  # 21.8% pour BNC
-        
-        # Seuils 2024
-        self.seuil_micro_bic = 188700
-        self.seuil_micro_bnc = 77700
+        # Utilise les paramètres centralisés
+        pass
     
     def get_nom_forme_juridique(self):
         return "Micro-entreprise"
     
     def get_optimisations_disponibles(self):
-        return ['per']  # Seulement PER en micro
+        return get_optimisations_disponibles('Micro-entreprise')
     
     def calculer_scenario(self, chiffre_affaires, type_activite='BIC', per_montant=0, **kwargs):
         """Calcule un scénario micro-entreprise"""
         resultats = {'forme_juridique': 'Micro-entreprise'}
         
         # Vérification seuils
-        seuil = self.seuil_micro_bic if type_activite == 'BIC' else self.seuil_micro_bnc
+        config = MICRO_BIC if type_activite == 'BIC' else MICRO_BNC
+        seuil = config['seuil']
         if chiffre_affaires > seuil:
             resultats['erreur'] = f"CA {chiffre_affaires:,.0f}€ dépasse le seuil micro {seuil:,.0f}€"
             return resultats
@@ -165,18 +134,16 @@ class Microentreprise(OptimisationFiscale):
         resultats['type_activite'] = type_activite
         
         # Cotisations sociales
-        taux_cotisations = self.taux_cotisations_micro_bic if type_activite == 'BIC' else self.taux_cotisations_micro_bnc
-        cotisations_sociales = chiffre_affaires * taux_cotisations
+        cotisations_sociales = chiffre_affaires * config['cotisations']
         resultats['cotisations_sociales'] = cotisations_sociales
         
         # Base imposable après abattement
-        abattement = self.abattement_micro_bic if type_activite == 'BIC' else self.abattement_micro_bnc
-        base_imposable = chiffre_affaires * (1 - abattement)
-        resultats['abattement_micro'] = chiffre_affaires * abattement
+        base_imposable = chiffre_affaires * (1 - config['abattement'])
+        resultats['abattement_micro'] = chiffre_affaires * config['abattement']
         resultats['base_imposable'] = base_imposable
         
         # PER
-        per_deduction = min(per_montant, min(base_imposable * 0.10, self.plafond_per))
+        per_deduction = min(per_montant, min(base_imposable * 0.10, PLAFOND_PER))
         base_imposable_finale = base_imposable - per_deduction
         resultats['per_deduction'] = per_deduction
         resultats['base_imposable_finale'] = base_imposable_finale
@@ -198,7 +165,7 @@ class Microentreprise(OptimisationFiscale):
             'per': per_montant,
             'madelin': 0,
             'girardin': 0,
-            'economies_totales': per_deduction * 0.30
+            'economies_totales': per_deduction * TAUX_ECONOMIE_PER
         }
         
         return resultats
@@ -206,9 +173,10 @@ class Microentreprise(OptimisationFiscale):
     def optimiser(self, type_activite='BIC', pas=5000, per_max=None, **kwargs):
         """Optimise le CA pour la micro-entreprise"""
         if per_max is None:
-            per_max = self.plafond_per
+            per_max = PLAFOND_PER
         
-        seuil = self.seuil_micro_bic if type_activite == 'BIC' else self.seuil_micro_bnc
+        config = MICRO_BIC if type_activite == 'BIC' else MICRO_BNC
+        seuil = config['seuil']
         meilleur_scenario = None
         tous_scenarios = []
         
@@ -240,15 +208,14 @@ class SAS(OptimisationFiscale):
     def __init__(self, resultat_avant_remuneration=300000, charges_existantes=50000, parts_fiscales=1):
         super().__init__(resultat_avant_remuneration, charges_existantes, parts_fiscales)
         
-        # Cotisations assimilé salarié (approximation)
-        self.taux_cotisations_salarie = 0.22  # ~22% cotisations salariales
-        self.taux_cotisations_patronales = 0.42  # ~42% cotisations patronales
+        # Utilise les paramètres centralisés
+        pass
     
     def get_nom_forme_juridique(self):
         return "SAS"
     
     def get_optimisations_disponibles(self):
-        return ['per', 'girardin']  # Pas de Madelin pour assimilé salarié
+        return get_optimisations_disponibles('SAS')
     
     def calculer_scenario(self, salaire_brut, per_montant=0, girardin_montant=0, **kwargs):
         """Calcule un scénario SAS"""
@@ -257,8 +224,8 @@ class SAS(OptimisationFiscale):
         resultats['salaire_brut'] = salaire_brut
         
         # Cotisations
-        cotisations_salariales = salaire_brut * self.taux_cotisations_salarie
-        cotisations_patronales = salaire_brut * self.taux_cotisations_patronales
+        cotisations_salariales = salaire_brut * TAUX_COTISATIONS_SALARIE
+        cotisations_patronales = salaire_brut * TAUX_COTISATIONS_PATRONALES
         cout_total_salaire = salaire_brut + cotisations_patronales
         
         resultats['cotisations_salariales'] = cotisations_salariales
@@ -270,13 +237,13 @@ class SAS(OptimisationFiscale):
         resultats['salaire_net_avant_ir'] = salaire_net_avant_ir
         
         # Revenu imposable avec abattement 10%
-        abattement = min(salaire_net_avant_ir * self.abattement_frais_pro, self.plafond_abattement)
+        abattement = min(salaire_net_avant_ir * ABATTEMENT_FRAIS_PRO, PLAFOND_ABATTEMENT_FRAIS_PRO)
         revenu_imposable = salaire_net_avant_ir - abattement
         resultats['abattement_frais_pro'] = abattement
         resultats['revenu_imposable'] = revenu_imposable
         
         # PER
-        per_deduction = min(per_montant, min(revenu_imposable * 0.10, self.plafond_per))
+        per_deduction = min(per_montant, min(revenu_imposable * 0.10, PLAFOND_PER))
         revenu_imposable_final = revenu_imposable - per_deduction
         resultats['per_deduction'] = per_deduction
         resultats['revenu_imposable_final'] = revenu_imposable_final
@@ -285,7 +252,7 @@ class SAS(OptimisationFiscale):
         ir_avant_girardin, ir_detail = self.calculer_ir(revenu_imposable_final)
         
         # Girardin
-        reduction_girardin = min(girardin_montant * self.taux_girardin_industriel, ir_avant_girardin)
+        reduction_girardin = min(girardin_montant * TAUX_GIRARDIN_INDUSTRIEL, ir_avant_girardin)
         ir_final = ir_avant_girardin - reduction_girardin
         
         resultats['ir_avant_girardin'] = ir_avant_girardin
@@ -311,7 +278,7 @@ class SAS(OptimisationFiscale):
         resultats['dividendes_bruts'] = dividendes_bruts
         
         # Flat tax sur dividendes
-        flat_tax = dividendes_bruts * self.taux_flat_tax
+        flat_tax = dividendes_bruts * TAUX_FLAT_TAX
         dividendes_nets = dividendes_bruts - flat_tax
         resultats['flat_tax'] = flat_tax
         resultats['dividendes_nets'] = dividendes_nets
@@ -328,7 +295,7 @@ class SAS(OptimisationFiscale):
             'per': per_montant,
             'madelin': 0,
             'girardin': girardin_montant,
-            'economies_totales': per_deduction * 0.30 + reduction_girardin
+            'economies_totales': per_deduction * TAUX_ECONOMIE_PER + reduction_girardin
         }
         
         return resultats
@@ -336,7 +303,7 @@ class SAS(OptimisationFiscale):
     def optimiser(self, pas=5000, per_max=None, girardin_max=None, **kwargs):
         """Optimise la répartition salaire/dividendes en SAS"""
         if per_max is None:
-            per_max = self.plafond_per
+            per_max = PLAFOND_PER
         if girardin_max is None:
             girardin_max = 50000
         
@@ -381,45 +348,18 @@ class SARL(OptimisationFiscale):
     def __init__(self, resultat_avant_remuneration=300000, charges_existantes=50000, parts_fiscales=1):
         super().__init__(resultat_avant_remuneration, charges_existantes, parts_fiscales)
         
-        # Paramètres spécifiques TNS
-        self.taux_cotisations_tns = {
-            'maladie': 0.065,
-            'allocations_familiales': 0.031,
-            'retraite_base': 0.1775,
-            'retraite_complementaire': 0.07,
-            'invalidite_deces': 0.013,
-            'csg_crds': 0.097,
-            'formation': 0.0025
-        }
+        # Utilise les paramètres centralisés
+        pass
     
     def get_nom_forme_juridique(self):
         return "SARL"
     
     def get_optimisations_disponibles(self):
-        return ['per', 'madelin', 'girardin']
+        return get_optimisations_disponibles(self.get_nom_forme_juridique())
     
     def calculer_cotisations_tns(self, remuneration_brute):
         """Calcule les cotisations TNS"""
-        assiette = remuneration_brute * 0.9
-        
-        cotisations = {}
-        total = 0
-        
-        for nom, taux in self.taux_cotisations_tns.items():
-            if nom == 'retraite_base':
-                base = min(assiette, 46368)
-                cotisations[nom] = base * taux
-            elif nom == 'allocations_familiales':
-                if remuneration_brute < 162288:
-                    cotisations[nom] = assiette * taux
-                else:
-                    cotisations[nom] = assiette * 0.031
-            else:
-                cotisations[nom] = assiette * taux
-            
-            total += cotisations[nom]
-        
-        return total, cotisations
+        return calculer_cotisations_tns(remuneration_brute)
     
     def calculer_scenario(self, remuneration_gerance, per_montant=0, madelin_montant=0, girardin_montant=0, **kwargs):
         """Calcule un scénario SARL"""
@@ -433,13 +373,13 @@ class SARL(OptimisationFiscale):
         resultats['remuneration_nette_avant_ir'] = remuneration_gerance
         
         # 2. Revenu imposable
-        abattement = min(remuneration_gerance * self.abattement_frais_pro, self.plafond_abattement)
+        abattement = min(remuneration_gerance * ABATTEMENT_FRAIS_PRO, PLAFOND_ABATTEMENT_FRAIS_PRO)
         revenu_imposable = remuneration_gerance - abattement
         resultats['abattement_frais_pro'] = abattement
         resultats['revenu_imposable'] = revenu_imposable
         
         # 3. PER
-        per_deduction = min(per_montant, min(revenu_imposable * 0.10, self.plafond_per))
+        per_deduction = min(per_montant, min(revenu_imposable * 0.10, PLAFOND_PER))
         revenu_imposable_final = revenu_imposable - per_deduction
         resultats['per_deduction'] = per_deduction
         resultats['revenu_imposable_final'] = revenu_imposable_final
@@ -448,7 +388,7 @@ class SARL(OptimisationFiscale):
         ir_avant_girardin, ir_detail = self.calculer_ir(revenu_imposable_final)
         
         # Girardin
-        reduction_girardin = min(girardin_montant * self.taux_girardin_industriel, ir_avant_girardin)
+        reduction_girardin = min(girardin_montant * TAUX_GIRARDIN_INDUSTRIEL, ir_avant_girardin)
         ir_final = ir_avant_girardin - reduction_girardin
         
         resultats['ir_avant_girardin'] = ir_avant_girardin
@@ -458,7 +398,7 @@ class SARL(OptimisationFiscale):
         resultats['remuneration_nette_apres_ir'] = remuneration_gerance - ir_final
         
         # 5. Madelin (charge déductible)
-        madelin_charge = min(madelin_montant, self.plafond_madelin)
+        madelin_charge = min(madelin_montant, PLAFOND_MADELIN_TNS)
         resultat_apres_remuneration = self.resultat_avant_remuneration - remuneration_gerance - cotisations_tns - madelin_charge
         resultats['madelin_charge'] = madelin_charge
         resultats['resultat_apres_remuneration'] = resultat_apres_remuneration
@@ -473,8 +413,8 @@ class SARL(OptimisationFiscale):
         resultats['dividendes_bruts'] = dividendes_bruts
         
         # 8. Imposition dividendes - choisir entre flat tax et barème
-        flat_tax = dividendes_bruts * self.taux_flat_tax
-        prelevements_sociaux = dividendes_bruts * self.taux_prelevements_sociaux_dividendes
+        flat_tax = dividendes_bruts * TAUX_FLAT_TAX
+        prelevements_sociaux = dividendes_bruts * TAUX_PRELEVEMENTS_SOCIAUX_DIVIDENDES
         ir_dividendes, _ = self.calculer_ir(dividendes_bruts * 0.6)  # Abattement 40%
         option_bareme = prelevements_sociaux + ir_dividendes
         
@@ -505,7 +445,7 @@ class SARL(OptimisationFiscale):
             'per': per_montant,
             'madelin': madelin_montant,
             'girardin': girardin_montant,
-            'economies_totales': per_deduction * 0.30 + madelin_charge * 0.25 + reduction_girardin
+            'economies_totales': per_deduction * TAUX_ECONOMIE_PER + madelin_charge * TAUX_ECONOMIE_IS_MADELIN + reduction_girardin
         }
         
         return resultats
@@ -513,9 +453,9 @@ class SARL(OptimisationFiscale):
     def optimiser(self, pas=5000, per_max=None, madelin_max=None, girardin_max=None, **kwargs):
         """Optimise la SARL"""
         if per_max is None:
-            per_max = self.plafond_per
+            per_max = PLAFOND_PER
         if madelin_max is None:
-            madelin_max = self.plafond_madelin
+            madelin_max = PLAFOND_MADELIN_TNS
         if girardin_max is None:
             girardin_max = 50000
         
@@ -564,48 +504,21 @@ class SARLHolding(OptimisationFiscale):
     def __init__(self, resultat_avant_remuneration=300000, charges_existantes=50000, parts_fiscales=1):
         super().__init__(resultat_avant_remuneration, charges_existantes, parts_fiscales)
         
-        # Paramètres spécifiques TNS
-        self.taux_cotisations_tns = {
-            'maladie': 0.065,
-            'allocations_familiales': 0.031,
-            'retraite_base': 0.1775,
-            'retraite_complementaire': 0.07,
-            'invalidite_deces': 0.013,
-            'csg_crds': 0.097,
-            'formation': 0.0025
-        }
+        # Utilise les paramètres centralisés
+        pass
         
-        # Spécifique holding
-        self.taux_exoneration_mere_fille = 0.95
+        # Utilise les paramètres centralisés
+        pass
     
     def get_nom_forme_juridique(self):
         return "SARL + Holding"
     
     def get_optimisations_disponibles(self):
-        return ['per', 'madelin', 'girardin']
+        return get_optimisations_disponibles(self.get_nom_forme_juridique())
     
     def calculer_cotisations_tns(self, remuneration_brute):
         """Calcule les cotisations TNS"""
-        assiette = remuneration_brute * 0.9
-        
-        cotisations = {}
-        total = 0
-        
-        for nom, taux in self.taux_cotisations_tns.items():
-            if nom == 'retraite_base':
-                base = min(assiette, 46368)
-                cotisations[nom] = base * taux
-            elif nom == 'allocations_familiales':
-                if remuneration_brute < 162288:
-                    cotisations[nom] = assiette * taux
-                else:
-                    cotisations[nom] = assiette * 0.031
-            else:
-                cotisations[nom] = assiette * taux
-            
-            total += cotisations[nom]
-        
-        return total, cotisations
+        return calculer_cotisations_tns(remuneration_brute)
     
     def calculer_scenario(self, remuneration_gerance, per_montant=0, madelin_montant=0, girardin_montant=0, **kwargs):
         """Calcule un scénario SARL + Holding (reprise du code existant)"""
@@ -619,15 +532,15 @@ class SARLHolding(OptimisationFiscale):
         resultats['remuneration_nette_avant_ir'] = remuneration_gerance
         
         # 2. Calcul du revenu imposable (après abattement 10%)
-        abattement = min(resultats['remuneration_nette_avant_ir'] * self.abattement_frais_pro, 
-                         self.plafond_abattement)
+        abattement = min(resultats['remuneration_nette_avant_ir'] * ABATTEMENT_FRAIS_PRO, 
+                         PLAFOND_ABATTEMENT_FRAIS_PRO)
         revenu_imposable = resultats['remuneration_nette_avant_ir'] - abattement
         resultats['abattement_frais_pro'] = abattement
         resultats['revenu_imposable'] = revenu_imposable
         
         # 3. Optimisations fiscales sur le revenu
         # PER : déduction du revenu imposable
-        per_deduction = min(per_montant, min(revenu_imposable * 0.10, self.plafond_per))
+        per_deduction = min(per_montant, min(revenu_imposable * 0.10, PLAFOND_PER))
         revenu_imposable_final = revenu_imposable - per_deduction
         
         resultats['per_deduction'] = per_deduction
@@ -638,7 +551,7 @@ class SARLHolding(OptimisationFiscale):
         ir_remuneration, detail_ir = self.calculer_ir(revenu_imposable_final)
         
         # Girardin : réduction d'impôt (110% de l'investissement)
-        reduction_girardin_brute = girardin_montant * self.taux_girardin_industriel
+        reduction_girardin_brute = girardin_montant * TAUX_GIRARDIN_INDUSTRIEL
         reduction_girardin = min(reduction_girardin_brute, ir_remuneration)
         ir_final = ir_remuneration - reduction_girardin
         
@@ -650,7 +563,7 @@ class SARLHolding(OptimisationFiscale):
         
         # 5. Calcul du résultat après rémunération et charges Madelin
         # Madelin TNS : charge déductible de la SARL (limité au plafond)
-        madelin_charge = min(madelin_montant, self.plafond_madelin)
+        madelin_charge = min(madelin_montant, PLAFOND_MADELIN_TNS)
         resultat_apres_remuneration = self.resultat_avant_remuneration - remuneration_gerance - cotisations_tns - madelin_charge
         resultats['resultat_apres_remuneration'] = resultat_apres_remuneration
         resultats['madelin_charge'] = madelin_charge
@@ -678,7 +591,7 @@ class SARLHolding(OptimisationFiscale):
         resultats['dividendes_sarl'] = dividendes_sarl
         
         # 8. Remontée à la holding (régime mère-fille)
-        quote_part_imposable = dividendes_sarl * (1 - self.taux_exoneration_mere_fille)
+        quote_part_imposable = dividendes_sarl * (1 - TAUX_EXONERATION_MERE_FILLE)
         is_holding = quote_part_imposable * 0.25
         dividendes_holding = dividendes_sarl - is_holding
         
@@ -687,7 +600,7 @@ class SARLHolding(OptimisationFiscale):
         resultats['dividendes_holding'] = dividendes_holding
         
         # 9. Distribution finale et flat tax
-        flat_tax = dividendes_holding * self.taux_flat_tax
+        flat_tax = dividendes_holding * TAUX_FLAT_TAX
         dividendes_nets = dividendes_holding - flat_tax
         
         resultats['flat_tax'] = flat_tax
@@ -719,9 +632,9 @@ class SARLHolding(OptimisationFiscale):
     def optimiser(self, pas=5000, per_max=None, madelin_max=None, girardin_max=None, **kwargs):
         """Optimise SARL + Holding (reprise méthode existante)"""
         if per_max is None:
-            per_max = self.plafond_per
+            per_max = PLAFOND_PER
         if madelin_max is None:
-            madelin_max = self.plafond_madelin
+            madelin_max = PLAFOND_MADELIN_TNS
         if girardin_max is None:
             girardin_max = 50000
         
