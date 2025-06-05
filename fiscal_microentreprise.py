@@ -84,22 +84,11 @@ class Microentreprise(OptimisationFiscale):
         resultats['total_net'] = net_final  # Sera ajusté dans la base
         resultats['charges_reelles'] = self.charges
         
-        # Ajout des champs pour compatibilité avec l'interface
-        resultats['dividendes_nets'] = 0  # Pas de dividendes en micro
-        resultats['cotisations_tns'] = 0  # Pas de cotisations TNS
-        resultats['cotisations_detail'] = {}  # Pas de détail TNS
-        resultats['is_sarl'] = 0  # Pas d'IS
-        resultats['is_holding'] = 0  # Pas de holding
-        resultats['flat_tax'] = 0  # Pas de flat tax
-        
         # Champs spécifiques micro pour le résumé
-        resultats['remuneration_brute'] = chiffre_affaires
+        resultats['base_imposable'] = base_imposable
+        resultats['is_detail'] = []  # Pas d'IS en micro-entreprise
         resultats['abattement_frais_pro'] = 0  # Pas d'abattement frais pro en micro
-        resultats['resultat_apres_remuneration'] = 0  # Pas applicable
-        resultats['is_detail'] = []
-        resultats['dividendes_sarl'] = 0
-        resultats['quote_part_imposable'] = 0
-        resultats['dividendes_holding'] = 0
+        resultats['remuneration_brute'] = chiffre_affaires  # Pour compatibilité interface
         
         resultats['optimisations'] = {
             'madelin': madelin_montant,

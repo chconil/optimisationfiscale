@@ -55,17 +55,17 @@ class SAS(OptimisationFiscale):
         resultats['remuneration_nette_avant_ir'] = salaire_net_avant_ir
         
         # Résultat après charges sociales et salaires
-        resultat_apres_salaire = self.resultat_avant_remuneration - cout_total_salaire
-        resultats['resultat_apres_salaire'] = resultat_apres_salaire
+        resultat_apres_remuneration = self.resultat_avant_remuneration - cout_total_salaire
+        resultats['resultat_apres_remuneration'] = resultat_apres_remuneration
         
         # IS
-        is_total, is_detail = self.calculer_is(resultat_apres_salaire)
+        is_total, is_detail = self.calculer_is(resultat_apres_remuneration)
         resultats['is_total'] = is_total
         resultats['is_sarl'] = is_total  # Alias pour compatibilité avec l'interface
         resultats['is_detail'] = is_detail
         
         # Dividendes
-        dividendes_bruts = resultat_apres_salaire - is_total
+        dividendes_bruts = resultat_apres_remuneration - is_total
         resultats['dividendes_bruts'] = dividendes_bruts
         resultats['dividendes_sarl'] = dividendes_bruts  # Alias pour compatibilité
         
@@ -81,19 +81,12 @@ class SAS(OptimisationFiscale):
         resultats['total_net'] = total_net
         
         # Calcul du taux de prélèvement sur les dividendes
-        if resultat_apres_salaire > 0:
-            taux_prelevement_dividendes = (is_total + flat_tax) / resultat_apres_salaire * 100
+        if resultat_apres_remuneration > 0:
+            taux_prelevement_dividendes = (is_total + flat_tax) / resultat_apres_remuneration * 100
         else:
             taux_prelevement_dividendes = 0
         
-        # Ajouter les champs manquants pour compatibilité avec l'interface SARL
-        resultats['cotisations_tns'] = 0  # Pas de cotisations TNS en SAS
-        resultats['cotisations_detail'] = {}  # Pas de détail TNS
-        resultats['resultat_apres_remuneration'] = resultat_apres_salaire  # Alias
-        resultats['madelin_charge'] = 0  # Pas de Madelin en SAS
-        resultats['is_holding'] = 0  # Pas de holding
-        resultats['quote_part_imposable'] = 0  # Pas de quote-part en SAS simple
-        resultats['dividendes_holding'] = dividendes_nets  # Alias pour dividendes finaux
+        # Calcul du taux de prélèvement sur les dividendes
         resultats['taux_prelevement_dividendes'] = taux_prelevement_dividendes
         
         resultats['optimisations'] = {

@@ -469,8 +469,9 @@ def main():
         
         # Préparer les détails IS
         is_detail_str = ""
-        for detail in meilleur_avec_niches['is_detail']:
-            is_detail_str += f"  • {detail['base']:,.0f}€ à {detail['taux']*100:.0f}% = {detail['impot']:,.0f}€  \n"
+        if 'is_detail' in meilleur_avec_niches and meilleur_avec_niches['is_detail']:
+            for detail in meilleur_avec_niches['is_detail']:
+                is_detail_str += f"  • {detail['base']:,.0f}€ à {detail['taux']*100:.0f}% = {detail['impot']:,.0f}€  \n"
         
         # Préparer les détails IR
         ir_detail_str = ""
@@ -515,7 +516,7 @@ def main():
                 
                 st.markdown(f"""
                 **Coût total employeur :** {meilleur_avec_niches.get('cout_total_salaire', 0):,.0f}€  
-                **Résultat après salaire :** {meilleur_avec_niches.get('resultat_apres_salaire', meilleur_avec_niches['resultat_apres_remuneration']):,.0f}€  
+                **Résultat après salaire :** {meilleur_avec_niches.get('resultat_apres_remuneration', meilleur_avec_niches['resultat_apres_remuneration']):,.0f}€  
                 
                 """)
                 
@@ -635,7 +636,7 @@ def main():
                 • Dividendes nets : {meilleur_avec_niches.get('dividendes_nets', 0):,.0f}€  
                 • Économies optimisations : {meilleur_avec_niches['optimisations']['economies_totales']:,.0f}€  
                 """)
-            else:
+            elif forme_juridique in ["SARL"]:
                 st.markdown("#### 🎯 RÉSULTAT FINAL")
                 st.markdown(f"""
                 **Dividendes reçus :** {meilleur_avec_niches['dividendes_sarl']:,.0f}€  
@@ -645,6 +646,13 @@ def main():
                 
                 **🎯 TOTAL NET PERÇU :** {meilleur_avec_niches['total_net']:,.0f}€  
                 **Taux prélèvement global :** {meilleur_avec_niches['taux_prelevement_global']:.1f}%
+                """)
+            else:
+                # Micro-entreprise ou autres formes
+                st.markdown("#### 🎯 RÉSULTAT FINAL")
+                st.markdown(f"""
+                **🎯 TOTAL NET PERÇU :** {meilleur_avec_niches.get('total_net', 0):,.0f}€  
+                **Taux prélèvement global :** {meilleur_avec_niches.get('taux_prelevement_global', 0):.1f}%
                 """)
                 
                 st.markdown(f"""
@@ -714,57 +722,66 @@ def main():
         
         # Tableau détaillé des données
         st.subheader("📋 Tableau Détaillé des Scénarios")
-        df_scenarios = create_scenarios_dataframe(scenarios_avec_niches)
+        df_scenarios = create_scenarios_dataframe(scenarios_avec_niches, forme_juridique)
         
         # Affichage avec possibilité de filtrer
-        col_filter1, col_filter2 = st.columns(2)
-        with col_filter1:
-            min_remun_filter = st.number_input(
-                "Rémunération minimum à afficher (€)",
-                min_value=0,
-                max_value=int(df_scenarios['Rémunération Brute'].max()) if not df_scenarios.empty else 0,
-                value=0,
-                step=10000
-            )
-        with col_filter2:
-            max_remun_filter = st.number_input(
-                "Rémunération maximum à afficher (€)",
-                min_value=0,
-                max_value=int(df_scenarios['Rémunération Brute'].max()) if not df_scenarios.empty else 300000,
-                value=int(df_scenarios['Rémunération Brute'].max()) if not df_scenarios.empty else 300000,
-                step=10000
-            )
-        
-        # Filtrer le DataFrame
-        df_filtered = df_scenarios[
-            (df_scenarios['Rémunération Brute'] >= min_remun_filter) & 
-            (df_scenarios['Rémunération Brute'] <= max_remun_filter)
-        ]
+        if not df_scenarios.empty:
+            first_column = df_scenarios.columns[0]  # Première colonne (rémunération/CA selon la forme)
+            
+            # Adapter le label selon la forme
+            if forme_juridique == "Micro-entreprise":
+                filter_label = "Chiffre d'affaires"
+            elif forme_juridique == "SAS":
+                filter_label = "Salaire brut"
+            else:
+                filter_label = "Rémunération"
+            
+            col_filter1, col_filter2 = st.columns(2)
+            with col_filter1:
+                min_remun_filter = st.number_input(
+                    f"{filter_label} minimum à afficher (€)",
+                    min_value=0,
+                    max_value=int(df_scenarios[first_column].max()),
+                    value=0,
+                    step=10000
+                )
+            with col_filter2:
+                max_remun_filter = st.number_input(
+                    f"{filter_label} maximum à afficher (€)",
+                    min_value=0,
+                    max_value=int(df_scenarios[first_column].max()),
+                    value=int(df_scenarios[first_column].max()),
+                    step=10000
+                )
+            
+            # Filtrer le DataFrame
+            df_filtered = df_scenarios[
+                (df_scenarios[first_column] >= min_remun_filter) & 
+                (df_scenarios[first_column] <= max_remun_filter)
+            ]
+        else:
+            df_filtered = df_scenarios
         
         # Mettre en évidence l'optimum
         if not df_filtered.empty:
             optimal_idx = df_filtered['Total Net'].idxmax()
-            st.info(f"🎯 **Optimum visible:** Rémunération {df_filtered.loc[optimal_idx, 'Rémunération Brute']:,.0f}€ → Total net {df_filtered.loc[optimal_idx, 'Total Net']:,.0f}€")
+            first_col_value = df_filtered.loc[optimal_idx, first_column]
+            st.info(f"🎯 **Optimum visible:** {filter_label} {first_col_value:,.0f}€ → Total net {df_filtered.loc[optimal_idx, 'Total Net']:,.0f}€")
+        
+        # Configuration dynamique des colonnes
+        column_config = {}
+        for col in df_filtered.columns:
+            if col == "Taux Prélèvement (%)":
+                column_config[col] = st.column_config.NumberColumn(col, format="%.2f%%")
+            else:
+                column_config[col] = st.column_config.NumberColumn(col, format="€%.0f")
         
         # Afficher le tableau
         st.dataframe(
             df_filtered,
             use_container_width=True,
             hide_index=True,
-            column_config={
-                "Rémunération Brute": st.column_config.NumberColumn("Rémunération Brute", format="€%.0f"),
-                "Total Net": st.column_config.NumberColumn("Total Net", format="€%.0f"),
-                "Rémunération Nette": st.column_config.NumberColumn("Rémunération Nette", format="€%.0f"),
-                "Dividendes Nets": st.column_config.NumberColumn("Dividendes Nets", format="€%.0f"),
-                "Cotisations TNS": st.column_config.NumberColumn("Cotisations TNS", format="€%.0f"),
-                "IR": st.column_config.NumberColumn("IR", format="€%.0f"),
-                "IS SARL": st.column_config.NumberColumn("IS SARL", format="€%.0f"),
-                "IS Holding": st.column_config.NumberColumn("IS Holding", format="€%.0f"),
-                "Flat Tax": st.column_config.NumberColumn("Flat Tax", format="€%.0f"),
-                "Total Prélèvements": st.column_config.NumberColumn("Total Prélèvements", format="€%.0f"),
-                "Net Disponible": st.column_config.NumberColumn("Net Disponible", format="€%.2f"),
-                "Taux Prélèvement (%)": st.column_config.NumberColumn("Taux Prélèvement (%)", format="%.2f%%")
-            }
+            column_config=column_config
         )
         
         # Bouton de téléchargement CSV
@@ -777,36 +794,68 @@ def main():
         )
 
 
-def create_scenarios_dataframe(scenarios):
-    """Crée un DataFrame avec tous les scénarios pour affichage en tableau"""
+def create_scenarios_dataframe(scenarios, forme_juridique):
+    """Crée un DataFrame avec tous les scénarios pour affichage en tableau selon la forme juridique"""
     data = []
     
     for s in scenarios:
-        # Calculs similaires à export_donnees.py
-        total_cotisations = s['cotisations_tns'] + s['ir_remuneration'] + s['is_sarl'] + s['is_holding'] + s['flat_tax']
-        net_disponible = s['remuneration_nette_apres_ir'] + s['dividendes_nets']
-        verification_somme = total_cotisations + net_disponible
+        row = {}
         
-        row = {
-            'Rémunération Brute': s['remuneration_brute'],
-            'Total Net': s['total_net'],
-            'Rémunération Nette': s['remuneration_nette_apres_ir'],
-            'Dividendes Nets': s['dividendes_nets'],
-            'Cotisations TNS': s['cotisations_tns'],
-            'IR': s['ir_remuneration'],
-            'IS SARL': s['is_sarl'],
-            'IS Holding': s['is_holding'],
-            'Flat Tax': s['flat_tax'],
-            'Total Prélèvements': total_cotisations,
-            'Net Disponible': net_disponible,
-            'Taux Prélèvement (%)': s['taux_prelevement_global']
-        }
+        if forme_juridique == "Micro-entreprise":
+            row = {
+                'Chiffre d\'affaires': s.get('chiffre_affaires', 0),
+                'Total Net': s.get('total_net', 0),
+                'Cotisations Sociales': s.get('cotisations_sociales', 0),
+                'IR': s.get('ir_remuneration', s.get('ir', 0)),
+                'Net Final': s.get('net_final', 0),
+                'Taux Prélèvement (%)': s.get('taux_prelevement_global', 0)
+            }
+        elif forme_juridique == "SAS":
+            row = {
+                'Salaire Brut': s.get('salaire_brut', 0),
+                'Total Net': s.get('total_net', 0),
+                'Salaire Net': s.get('remuneration_nette_apres_ir', 0),
+                'Dividendes Nets': s.get('dividendes_nets', 0),
+                'Cotisations Salariales': s.get('cotisations_salariales', 0),
+                'Cotisations Patronales': s.get('cotisations_patronales', 0),
+                'IR': s.get('ir_remuneration', 0),
+                'IS': s.get('is_sarl', s.get('is_total', 0)),
+                'Flat Tax': s.get('flat_tax', 0),
+                'Taux Prélèvement (%)': s.get('taux_prelevement_global', 0)
+            }
+        elif forme_juridique == "SARL":
+            row = {
+                'Rémunération Brute': s.get('remuneration_brute', 0),
+                'Total Net': s.get('total_net', 0),
+                'Rémunération Nette': s.get('remuneration_nette_apres_ir', 0),
+                'Dividendes Nets': s.get('dividendes_nets', 0),
+                'Cotisations TNS': s.get('cotisations_tns', 0),
+                'IR': s.get('ir_remuneration', 0),
+                'IS': s.get('is_sarl', s.get('is_total', 0)),
+                'Flat Tax': s.get('flat_tax', 0),
+                'Taux Prélèvement (%)': s.get('taux_prelevement_global', 0)
+            }
+        elif forme_juridique == "SARL + Holding":
+            row = {
+                'Rémunération Brute': s.get('remuneration_brute', 0),
+                'Total Net': s.get('total_net', 0),
+                'Rémunération Nette': s.get('remuneration_nette_apres_ir', 0),
+                'Dividendes Nets': s.get('dividendes_nets', 0),
+                'Cotisations TNS': s.get('cotisations_tns', 0),
+                'IR': s.get('ir_remuneration', 0),
+                'IS SARL': s.get('is_sarl', 0),
+                'IS Holding': s.get('is_holding', 0),
+                'Flat Tax': s.get('flat_tax', 0),
+                'Taux Prélèvement (%)': s.get('taux_prelevement_global', 0)
+            }
+        
         data.append(row)
     
     df = pd.DataFrame(data)
     
-    # Trier par rémunération brute
-    df = df.sort_values('Rémunération Brute').reset_index(drop=True)
+    # Trier par la première colonne (rémunération/CA)
+    if not df.empty:
+        df = df.sort_values(df.columns[0]).reset_index(drop=True)
     
     return df
 
@@ -816,16 +865,16 @@ def create_optimization_chart(scenarios):
     # Utiliser tous les scénarios (dividendes négatifs désormais gérés correctement)
     scenarios_valides = scenarios
     
-    remunerations = [s['remuneration_brute'] for s in scenarios_valides]
-    totaux_nets = [s['total_net'] for s in scenarios_valides]
-    taux_prelevements = [s['taux_prelevement_global'] for s in scenarios_valides]
-    remunerations_nettes = [s['remuneration_nette_apres_ir'] for s in scenarios_valides]
-    dividendes_nets = [s['dividendes_nets'] for s in scenarios_valides]
-    cotisations = [s['cotisations_tns'] for s in scenarios_valides]
-    ir = [s['ir_remuneration'] for s in scenarios_valides]
-    is_sarl = [s['is_sarl'] for s in scenarios_valides]
-    is_holding = [s['is_holding'] for s in scenarios_valides]
-    flat_tax = [s['flat_tax'] for s in scenarios_valides]
+    remunerations = [s.get('remuneration_brute', s.get('salaire_brut', s.get('chiffre_affaires', 0))) for s in scenarios_valides]
+    totaux_nets = [s.get('total_net', 0) for s in scenarios_valides]
+    taux_prelevements = [s.get('taux_prelevement_global', 0) for s in scenarios_valides]
+    remunerations_nettes = [s.get('remuneration_nette_apres_ir', s.get('net_final', 0)) for s in scenarios_valides]
+    dividendes_nets = [s.get('dividendes_nets', 0) for s in scenarios_valides]
+    cotisations = [s.get('cotisations_tns', s.get('cotisations_salariales', 0) + s.get('cotisations_patronales', 0) + s.get('cotisations_sociales', 0)) for s in scenarios_valides]
+    ir = [s.get('ir_remuneration', s.get('ir', 0)) for s in scenarios_valides]
+    is_sarl = [s.get('is_sarl', s.get('is_total', 0)) for s in scenarios_valides]
+    is_holding = [s.get('is_holding', 0) for s in scenarios_valides]
+    flat_tax = [s.get('flat_tax', 0) for s in scenarios_valides]
     
     # Créer des sous-graphiques (2x2 - 1)
     fig = sp.make_subplots(

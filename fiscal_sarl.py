@@ -100,10 +100,7 @@ class SARL(OptimisationFiscale):
         else:
             taux_prelevement_dividendes = 0
         
-        # Ajouter les champs manquants pour compatibilité avec l'interface holding
-        resultats['is_holding'] = 0  # Pas de holding en SARL simple
-        resultats['quote_part_imposable'] = 0  # Pas de quote-part en SARL simple
-        resultats['dividendes_holding'] = dividendes_nets  # Alias pour dividendes finaux
+        # Calcul du taux de prélèvement sur les dividendes  
         resultats['taux_prelevement_dividendes'] = taux_prelevement_dividendes
         
         resultats['optimisations'] = {
@@ -120,4 +117,8 @@ class SARL(OptimisationFiscale):
         resultats['taux_prelevement_global'] = taux_prelevement_global
         
         return resultats
+    
+    def is_scenario_valid(self, scenario):
+        """Pour SARL, vérifie que les dividendes et flat_tax ne sont pas négatifs"""
+        return scenario.get('flat_tax', -1) >= 0 and scenario.get('dividendes_nets', -1) >= 0
     
