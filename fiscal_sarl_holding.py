@@ -24,10 +24,15 @@ class SARLHolding(OptimisationFiscale):
         """Calcule les cotisations TNS"""
         return calculer_cotisations_tns(remuneration_brute)
     
-    def calculer_scenario_base(self, remuneration_gerance, madelin_montant=0, **kwargs):
+    def calculer_scenario_base(self, remuneration_gerance, madelin_montant=0, versement_pee=0, **kwargs):
         """Calcule un scénario SARL + Holding (reprise du code existant)"""
         resultats = {'forme_juridique': 'SARL + Holding'}
-        
+
+        # 0. PEE/PERCO : Utilise la méthode commune de la classe de base
+        pee_resultats = self.calculer_pee(remuneration_gerance, versement_pee)
+        resultats.update(pee_resultats)
+        cout_abondement = pee_resultats['cout_abondement_pee']
+
         # 1. Calcul des cotisations TNS
         cotisations_tns, detail_cotisations = self.calculer_cotisations_tns(remuneration_gerance)
         resultats['remuneration_brute'] = remuneration_gerance
@@ -48,19 +53,23 @@ class SARLHolding(OptimisationFiscale):
         resultats['ir_detail'] = ir_detail
         resultats['madelin_deduction'] = 0  # Madelin Retraite n'est plus une déduction personnelle
 
-        # 4. Calcul du résultat après rémunération et charges Madelin Retraite
+        # 4. Calcul du résultat après rémunération et charges Madelin Retraite + PEE
         # Madelin Retraite TNS : charge déductible de la SARL (limité au plafond)
         madelin_charge = min(madelin_montant, PLAFOND_MADELIN_TNS)
-        resultat_apres_remuneration = self.resultat_avant_remuneration - remuneration_gerance - cotisations_tns - madelin_charge
+        resultat_apres_remuneration = self.resultat_avant_remuneration - remuneration_gerance - cotisations_tns - madelin_charge - cout_abondement
         resultats['resultat_apres_remuneration'] = resultat_apres_remuneration
         resultats['madelin_charge'] = madelin_charge
-        
-        # Optimisations de base (PER/Girardin ajoutés dans la base)
+
+        # Optimisations de base (PER/Girardin/PEE ajoutés dans la base)
         economie_is_madelin = madelin_charge * 0.25  # Économie d'IS à 25%
+        economie_pee_is = resultats['economie_is_abondement']
         resultats['optimisations'] = {
             'madelin': madelin_montant,
             'economie_is_madelin': economie_is_madelin,
-            'economies_totales': economie_is_madelin
+            'pee': resultats['versement_pee'],
+            'abondement_pee': resultats['abondement_pee'],
+            'economie_is_abondement': economie_pee_is,
+            'economies_totales': economie_is_madelin + economie_pee_is
         }
         
         # 5. Calcul de l'IS

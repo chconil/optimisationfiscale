@@ -95,11 +95,11 @@ class OptimisationFiscale(ABC):
     def calculer_ir_avec_girardin(self, revenu_imposable, girardin_montant=0):
         """Calcule l'IR avec réduction Girardin - commun à toutes les formes"""
         ir_avant_girardin, ir_detail = self.calculer_ir(revenu_imposable)
-        
+
         # Girardin
         reduction_girardin = min(girardin_montant * TAUX_GIRARDIN_INDUSTRIEL, ir_avant_girardin)
         ir_final = ir_avant_girardin - reduction_girardin
-        
+
         return {
             'ir_avant_girardin': ir_avant_girardin,
             'reduction_girardin': reduction_girardin,
@@ -109,7 +109,35 @@ class OptimisationFiscale(ABC):
             'ir': ir_final,
             'ir_remuneration': ir_final
         }
-    
+
+    def calculer_pee(self, remuneration_brute, versement_pee=0):
+        """Calcule le PEE + PERCO (épargne salariale et retraite) - commun à toutes les formes"""
+        import math
+        # Limite le versement salarié au montant qui peut être abondé
+        # Si abondement max = 7,418€ et abondement = 300% du versement
+        # Alors versement max abondable = 7,418€ / 3 = 2,473€ (arrondi supérieur)
+        versement_max_abonde = math.ceil(PLAFOND_ABONDEMENT_PEE / TAUX_ABONDEMENT_MAX)
+
+        # Versement salarié limité à :
+        # - 25% du salaire brut (limite légale)
+        # - ET au montant qui peut être abondé (optimisation fiscale)
+        versement_pee = min(versement_pee, remuneration_brute * LIMITE_VERSEMENT_PEE_SALARIE, versement_max_abonde)
+
+        # Abondement = 300% du versement, plafonné à 16% du PASS (7,418€)
+        abondement_pee = min(versement_pee * TAUX_ABONDEMENT_MAX, PLAFOND_ABONDEMENT_PEE)
+        # Coût abondement pour l'entreprise (abondement + CSG/CRDS 9.7%)
+        cout_abondement = abondement_pee * (1 + TAUX_CSG_CRDS_ABONDEMENT)
+        # Économie IS sur l'abondement (charge déductible)
+        economie_is_abondement = cout_abondement * 0.25  # Approximation avec taux moyen IS
+
+        return {
+            'versement_pee': versement_pee,
+            'abondement_pee': abondement_pee,
+            'cout_abondement_pee': cout_abondement,
+            'economie_is_abondement': economie_is_abondement,
+            'placements_pee': versement_pee + abondement_pee
+        }
+
     @abstractmethod
     def calculer_scenario_base(self, remuneration, **kwargs):
         """Méthode abstraite - calcul de base sans PER/Girardin"""

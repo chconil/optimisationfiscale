@@ -24,10 +24,15 @@ class SARL(OptimisationFiscale):
         """Calcule les cotisations TNS"""
         return calculer_cotisations_tns(remuneration_brute)
     
-    def calculer_scenario_base(self, remuneration_gerance, madelin_montant=0, **kwargs):
+    def calculer_scenario_base(self, remuneration_gerance, madelin_montant=0, versement_pee=0, **kwargs):
         """Calcule un scénario SARL"""
         resultats = {'forme_juridique': 'SARL'}
-        
+
+        # 0. PEE/PERCO : Utilise la méthode commune de la classe de base
+        pee_resultats = self.calculer_pee(remuneration_gerance, versement_pee)
+        resultats.update(pee_resultats)
+        cout_abondement = pee_resultats['cout_abondement_pee']
+
         # 1. Cotisations TNS
         cotisations_tns, detail_cotisations = self.calculer_cotisations_tns(remuneration_gerance)
         resultats['remuneration_brute'] = remuneration_gerance
@@ -49,7 +54,7 @@ class SARL(OptimisationFiscale):
         
         # 4. Madelin Retraite (charge déductible du résultat avant rémunération)
         madelin_charge = min(madelin_montant, PLAFOND_MADELIN_TNS)
-        resultat_apres_remuneration = self.resultat_avant_remuneration - madelin_charge - remuneration_gerance - cotisations_tns
+        resultat_apres_remuneration = self.resultat_avant_remuneration - madelin_charge - remuneration_gerance - cotisations_tns - cout_abondement
         resultats['madelin_charge'] = madelin_charge
         resultats['resultat_apres_remuneration'] = resultat_apres_remuneration
         
@@ -89,9 +94,16 @@ class SARL(OptimisationFiscale):
 
         resultats['taux_prelevement_dividendes'] = taux_prelevement_dividendes
 
+        # Économies totales = Madelin + PEE
+        economie_madelin = madelin_charge * TAUX_ECONOMIE_IS_MADELIN
+        economie_pee_is = resultats['economie_is_abondement']
+
         resultats['optimisations'] = {
             'madelin': madelin_montant,
-            'economies_totales': madelin_charge * TAUX_ECONOMIE_IS_MADELIN  # PER/Girardin ajoutés dans la base
+            'pee': resultats['versement_pee'],
+            'abondement_pee': resultats['abondement_pee'],
+            'economie_is_abondement': economie_pee_is,
+            'economies_totales': economie_madelin + economie_pee_is  # PER/Girardin/PEE ajoutés dans la base
         }
 
         # Calcul du taux de prélèvement global

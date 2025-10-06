@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.subplots as sp
 from formes_juridiques import creer_optimiseur, FORMES_JURIDIQUES
-from parametres_fiscaux import TAUX_COTISATIONS_TNS, MICRO_BIC, MICRO_BNC, MICRO_BIC_VENTE, MICRO_BIC_SERVICES, TAUX_COTISATIONS_SALARIE, TAUX_COTISATIONS_PATRONALES
+from parametres_fiscaux import TAUX_COTISATIONS_TNS, MICRO_BIC, MICRO_BNC, MICRO_BIC_VENTE, MICRO_BIC_SERVICES, TAUX_COTISATIONS_SALARIE, TAUX_COTISATIONS_PATRONALES, PLAFOND_ABONDEMENT_PEE, TAUX_ABONDEMENT_MAX
 
 def main():
     st.set_page_config(
@@ -195,22 +195,25 @@ def main():
                         help="Montant de l'investissement (dépense) qui génère la réduction d'impôt"
                     )
 
-            # PEE/PERCO (seulement pour SAS)
+            # PEE + PERCO (Épargne salariale et retraite)
             use_pee = False
             versement_pee = 0
             if 'pee' in optimisations_disponibles:
                 use_pee = st.checkbox(
-                    "💼 Plan d'Épargne Entreprise (PEE/PERCO)",
-                    help="Versement salarié + abondement employeur. Le versement est exonéré d'IR et l'abondement (max 3,709€) est une charge déductible de l'IS."
+                    "💼 PEE + PERCO (Épargne salariale et retraite)",
+                    help="Versement salarié + abondement employeur. Le versement est exonéré d'IR et l'abondement (max 7,418€) est une charge déductible de l'IS."
                 )
                 if use_pee:
+                    # Calcul du versement max qui peut être abondé : 7,418€ / 300% = 2,473€
+                    import math
+                    versement_max_abonde = math.ceil(PLAFOND_ABONDEMENT_PEE / TAUX_ABONDEMENT_MAX)
                     versement_pee = st.slider(
-                        "Versement salarié PEE (€)",
+                        "Versement salarié (€)",
                         min_value=0,
-                        max_value=10000,
-                        value=3000,
+                        max_value=versement_max_abonde,
+                        value=min(2000, versement_max_abonde),
                         step=100,
-                        help="Votre versement (max 25% du salaire brut). L'abondement employeur sera de 300% (max 3,709€)."
+                        help=f"Votre versement (max {versement_max_abonde:,.0f}€ pour abondement complet). L'abondement employeur sera de 300% (max {PLAFOND_ABONDEMENT_PEE:,.0f}€)."
                     )
         else:
             use_per = False
@@ -469,30 +472,39 @@ def main():
             
             # Graphique en camembert adapté selon la forme juridique
             if forme_juridique == "Micro-entreprise":
-                labels = ['Net Final', 'Cotisations Sociales', 'IR', 'PER']
+                labels = ['Net Final', 'PER', 'Cotisations Sociales', 'IR']
                 values = [
                     meilleur_avec_niches.get('net_final', 0),
+                    meilleur_avec_niches.get('optimisations', {}).get('per', 0),
                     meilleur_avec_niches.get('cotisations_sociales', 0),
-                    meilleur_avec_niches.get('ir', 0),
-                    meilleur_avec_niches.get('optimisations', {}).get('per', 0)
+                    meilleur_avec_niches.get('ir', 0)
                 ]
+                colors = ['#2ecc71', '#27ae60', '#e67e22', '#e74c3c']  # Vert foncé, vert, orange, rouge
             else:
-                labels = ['Salaire Net', 'Dividendes Nets', 'Cotisations TNS', 'IR', 'IS Total', 'Flat Tax']
+                # Grouper : Revenus (salaire, dividendes, placements) puis Prélèvements (cotisations, IR, IS, flat tax)
+                placements_total = meilleur_avec_niches.get('placements_total', 0)
+
+                labels = ['Rémunération nette', 'Dividendes nets', 'Placements',
+                         'Cotisations', 'IR', 'IS Total', 'Flat Tax']
                 values = [
                     meilleur_avec_niches.get('remuneration_nette_apres_ir', 0),
                     meilleur_avec_niches.get('dividendes_nets', 0),
-                    meilleur_avec_niches.get('cotisations_tns', 0),
-                    meilleur_avec_niches.get('ir_remuneration', 0),
+                    placements_total,
+                    meilleur_avec_niches.get('cotisations_tns', meilleur_avec_niches.get('cotisations_salariales', 0) + meilleur_avec_niches.get('cotisations_patronales', 0)),
+                    meilleur_avec_niches.get('ir_remuneration', meilleur_avec_niches.get('ir', 0)),
                     meilleur_avec_niches.get('is_sarl', 0) + meilleur_avec_niches.get('is_holding', 0),
                     meilleur_avec_niches.get('flat_tax', 0)
                 ]
-            
+                # Palette : verts pour revenus, rouges/oranges pour prélèvements
+                colors = ['#2ecc71', '#27ae60', '#1abc9c', '#e67e22', '#e74c3c', '#c0392b', '#8e44ad']
+
             fig_pie = go.Figure(data=[go.Pie(
                 labels=labels,
                 values=values,
                 hole=0.4,
                 textinfo='label+percent',
-                textposition='auto'
+                textposition='auto',
+                marker=dict(colors=colors)
             )])
             
             fig_pie.update_layout(
