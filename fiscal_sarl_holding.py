@@ -10,9 +10,9 @@ class SARLHolding(OptimisationFiscale):
     """Optimisation pour SARL + Holding (code existant adapté)"""
     
     def __init__(self, resultat_avant_remuneration=300000, charges_existantes=50000, parts_fiscales=1,
-                 per_max=None, madelin_max=None, girardin_max=None):
+                 per_max=None, madelin_max=None, girardin_max=None, plafond_per_disponible=None):
         super().__init__(resultat_avant_remuneration, charges_existantes, parts_fiscales,
-                         per_max, madelin_max, girardin_max)
+                         per_max, madelin_max, girardin_max, plafond_per_disponible)
     
     def get_nom_forme_juridique(self):
         return "SARL + Holding"
@@ -46,10 +46,10 @@ class SARLHolding(OptimisationFiscale):
         ir_base, ir_detail = self.calculer_ir(revenu_imposable)
         resultats['ir_base'] = ir_base
         resultats['ir_detail'] = ir_detail
-        resultats['madelin_deduction'] = 0  # Madelin n'est plus une déduction personnelle
-        
-        # 4. Calcul du résultat après rémunération et charges Madelin
-        # Madelin TNS : charge déductible de la SARL (limité au plafond)
+        resultats['madelin_deduction'] = 0  # Madelin Retraite n'est plus une déduction personnelle
+
+        # 4. Calcul du résultat après rémunération et charges Madelin Retraite
+        # Madelin Retraite TNS : charge déductible de la SARL (limité au plafond)
         madelin_charge = min(madelin_montant, PLAFOND_MADELIN_TNS)
         resultat_apres_remuneration = self.resultat_avant_remuneration - remuneration_gerance - cotisations_tns - madelin_charge
         resultats['resultat_apres_remuneration'] = resultat_apres_remuneration
@@ -74,11 +74,13 @@ class SARLHolding(OptimisationFiscale):
         
         # 7. Remontée à la holding (régime mère-fille)
         quote_part_imposable = dividendes_sarl * (1 - TAUX_EXONERATION_MERE_FILLE)
-        is_holding = quote_part_imposable * 0.25
+        # L'IS holding est progressif (15% jusqu'à 42,500€, puis 25%)
+        is_holding, detail_is_holding = self.calculer_is(quote_part_imposable)
         dividendes_holding = dividendes_sarl - is_holding
-        
+
         resultats['quote_part_imposable'] = quote_part_imposable
         resultats['is_holding'] = is_holding
+        resultats['is_holding_detail'] = detail_is_holding
         resultats['dividendes_holding'] = dividendes_holding
         
         # 8. Distribution finale et flat tax

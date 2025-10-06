@@ -69,7 +69,7 @@ PLAFOND_ABATTEMENT_FRAIS_PRO = 13522  # 2024
 
 # Dispositifs d'optimisation fiscale
 PLAFOND_PER = 32419  # Plan Épargne Retraite (8 x PASS 2024)
-PLAFOND_MADELIN_TNS = 84000  # Madelin TNS 2024
+PLAFOND_MADELIN_TNS = 84000  # Madelin Retraite TNS 2024
 TAUX_GIRARDIN_INDUSTRIEL = 1.10  # 110% de réduction d'impôt
 
 # Plafonds retraite et allocations familiales
@@ -78,7 +78,7 @@ SEUIL_ALLOCATIONS_FAMILIALES_REDUIT = 162288  # 3.5 PASS 2024
 
 # Taux d'économie approximatifs pour les calculs
 TAUX_ECONOMIE_PER = 0.30  # Approximation économie fiscale PER
-TAUX_ECONOMIE_IS_MADELIN = 0.25  # Économie IS pour charge Madelin
+TAUX_ECONOMIE_IS_MADELIN = 0.25  # Économie IS pour charge Madelin Retraite
 
 # ACRE (Aide à la Création ou à la Reprise d'une Entreprise)
 TAUX_REDUCTION_ACRE = 0.50  # 50% de réduction des cotisations sociales la 1ère année
@@ -116,94 +116,41 @@ def get_optimisations_disponibles(forme_juridique):
     config = get_config_forme_juridique(forme_juridique)
     return config.get('optimisations_disponibles', [])
 
-# Fonctions utilitaires pour les calculs
-def calculer_ir(revenu_net_imposable, parts_fiscales=1):
-    """Calcule l'IR selon le barème progressif"""
-    if revenu_net_imposable <= 0:
-        return 0, []
-        
-    revenu_par_part = revenu_net_imposable / parts_fiscales
-    
-    ir_par_part = 0
-    revenu_restant = revenu_par_part
-    details = []
-    tranche_precedente = 0
-    
-    for tranche in TRANCHES_IR:
-        if revenu_restant <= 0:
-            break
-        
-        largeur_tranche = tranche['limite'] - tranche_precedente
-        montant_dans_tranche = min(revenu_restant, largeur_tranche)
-        
-        if montant_dans_tranche > 0:
-            ir_tranche = montant_dans_tranche * tranche['taux']
-            ir_par_part += ir_tranche
-            
-            details.append({
-                'de': tranche_precedente,
-                'a': tranche_precedente + montant_dans_tranche,
-                'taux': tranche['taux'],
-                'base': montant_dans_tranche,
-                'impot': ir_tranche
-            })
-        
-        revenu_restant -= montant_dans_tranche
-        tranche_precedente = tranche['limite']
-        
-        if tranche['limite'] == float('inf'):
-            break
-    
-    ir_total = ir_par_part * parts_fiscales
-    return ir_total, details
-
-def calculer_is(benefice_imposable):
-    """Calcule l'IS selon les tranches"""
-    if benefice_imposable <= 0:
-        return 0, []
-        
-    is_total = 0
-    reste = benefice_imposable
-    details = []
-    
-    for tranche in TRANCHES_IS:
-        if reste <= 0:
-            break
-        
-        montant_tranche = min(reste, tranche['limite'])
-        is_tranche = montant_tranche * tranche['taux']
-        is_total += is_tranche
-        
-        details.append({
-            'tranche': tranche['limite'],
-            'taux': tranche['taux'],
-            'base': montant_tranche,
-            'impot': is_tranche
-        })
-        
-        reste -= montant_tranche
-    
-    return is_total, details
+# NOTE: Les fonctions calculer_ir() et calculer_is() sont définies dans fiscal_base.py
+# pour éviter la duplication de code. Utilisez les méthodes de la classe OptimisationFiscale.
 
 def calculer_cotisations_tns(remuneration_brute):
     """Calcule les cotisations TNS"""
     assiette = remuneration_brute * 0.9  # Abattement 10% frais pro
-    
+
     cotisations = {}
     total = 0
-    
+
     for nom, taux in TAUX_COTISATIONS_TNS.items():
         if nom == 'retraite_base':
             base = min(assiette, PLAFOND_RETRAITE_BASE)
             cotisations[nom] = base * taux
         elif nom == 'allocations_familiales':
-            if remuneration_brute < SEUIL_ALLOCATIONS_FAMILIALES_REDUIT:
-                cotisations[nom] = assiette * taux
+            # Barème progressif 2024 :
+            # 0% jusqu'à 46,368€ (1 PASS)
+            # Progressif de 46,368€ à 64,915€ (1.4 PASS)
+            # 3.1% au-delà de 64,915€
+            PASS_1 = 46368  # 1 PASS
+            PASS_1_4 = 64915  # 1.4 PASS
+
+            if assiette <= PASS_1:
+                # Exonération totale en dessous de 1 PASS
+                cotisations[nom] = 0
+            elif assiette <= PASS_1_4:
+                # Taux progressif entre 1 et 1.4 PASS
+                taux_progressif = 0.031 * (assiette - PASS_1) / (PASS_1_4 - PASS_1)
+                cotisations[nom] = assiette * taux_progressif
             else:
+                # Taux plein au-delà de 1.4 PASS
                 cotisations[nom] = assiette * 0.031
         else:
             cotisations[nom] = assiette * taux
-        
+
         total += cotisations[nom]
-    
+
     return total, cotisations

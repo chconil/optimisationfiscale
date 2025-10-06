@@ -10,9 +10,9 @@ class Microentreprise(OptimisationFiscale):
     """Optimisation pour micro-entreprise"""
     
     def __init__(self, resultat_avant_remuneration=300000, charges_existantes=0, parts_fiscales=1,
-                 per_max=None, madelin_max=None, girardin_max=None):
+                 per_max=None, madelin_max=None, girardin_max=None, plafond_per_disponible=None):
         super().__init__(resultat_avant_remuneration, charges_existantes, parts_fiscales,
-                         per_max, madelin_max, girardin_max)
+                         per_max, madelin_max, girardin_max, plafond_per_disponible)
     
     def get_nom_forme_juridique(self):
         return "Micro-entreprise"

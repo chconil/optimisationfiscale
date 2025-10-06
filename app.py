@@ -110,22 +110,22 @@ def main():
             st.subheader("🏢 Optimisations Niveau Entreprise")
             st.markdown("*Déductions et réductions au niveau de l'entreprise*")
             
-            # Madelin (seulement pour TNS)
+            # Madelin Retraite (seulement pour TNS)
             use_madelin = False
             madelin_max = 0
             if 'madelin' in optimisations_disponibles:
                 use_madelin = st.checkbox(
-                    "🏥 Contrat Madelin TNS",
+                    "🏥 Contrat Madelin Retraite TNS",
                     help="Charge déductible pour les TNS (max 84,000€ en 2024)"
                 )
                 if use_madelin:
                     madelin_max = st.slider(
-                        "Montant Madelin (€)",
+                        "Montant Madelin Retraite (€)",
                         min_value=0,
                         max_value=35000,
                         value=5000,
                         step=500,
-                        help="Plafond légal pour les charges Madelin TNS déductibles"
+                        help="Plafond légal pour les charges Madelin Retraite TNS déductibles"
                     )
             
             # ACRE (pour micro-entreprise)
@@ -140,6 +140,10 @@ def main():
             madelin_max = 0
             use_acre = False
         
+        # Note fiscalité des dividendes
+        if forme_juridique in ['SARL', 'SARL + Holding', 'SAS']:
+            st.info("💎 **Dividendes** : La flat tax (30%) est toujours appliquée pour simplifier les calculs.")
+
         # Optimisations fiscales - Niveau IR Personnel
         optimisations_ir = [opt for opt in optimisations_disponibles if opt in ['per', 'girardin']]
         if optimisations_ir:
@@ -149,19 +153,28 @@ def main():
             # PER (disponible pour tous sauf certains cas)
             use_per = False
             per_max = 0
+            plafond_per_disponible = 32419  # Valeur par défaut
             if 'per' in optimisations_disponibles:
                 use_per = st.checkbox(
                     "📈 Plan d'Épargne Retraite (PER)",
-                    help="Déduction fiscale sur le revenu imposable (max 32,419€ en 2024)"
+                    help="Déduction fiscale sur le revenu imposable"
                 )
                 if use_per:
-                    per_max = st.slider(
-                        "Montant PER (€)",
+                    plafond_per_disponible = st.number_input(
+                        "📋 Plafond PER disponible (€)",
                         min_value=0,
-                        max_value=30000,
-                        value=15000,
+                        max_value=100000,
+                        value=32419,
                         step=1000,
-                        help="Plafond légal : 8 x PASS = 32,419€ en 2024"
+                        help="Votre plafond PER réel selon votre avis fiscal (10% revenus N-1 + reports non utilisés). Défaut : 32,419€ (8 PASS 2024)"
+                    )
+                    per_max = st.slider(
+                        "Montant PER à verser (€)",
+                        min_value=0,
+                        max_value=int(plafond_per_disponible),
+                        value=min(15000, int(plafond_per_disponible)),
+                        step=1000,
+                        help=f"Montant que vous souhaitez verser (max {plafond_per_disponible:,.0f}€)"
                     )
             
             # Girardin (pour les IR)
@@ -211,7 +224,8 @@ def main():
                 forme_juridique,
                 resultat_avant_remuneration=resultat_initial,
                 charges_existantes=charges_existantes,
-                parts_fiscales=parts_fiscales
+                parts_fiscales=parts_fiscales,
+                plafond_per_disponible=plafond_per_disponible
             )
             
             # Optimisation selon la forme juridique
@@ -278,15 +292,49 @@ def main():
             st.subheader(f"🏆 Résultat Optimal - {forme_juridique}")
             
             # Métriques principales adaptées selon la forme
-            net_key = 'net_final' if forme_juridique == "Micro-entreprise" else 'total_net'
-            net_optimal = meilleur_avec_niches.get(net_key, 0)
-            net_classique = meilleur_classique.get(net_key, 0)
-            
-            st.metric(
-                "💰 Total Net Optimal",
-                f"{net_optimal:,.0f}€",
-                delta=f"+{net_optimal - net_classique:,.0f}€"
-            )
+            placements_optim = meilleur_avec_niches.get('placements_total', 0)
+
+            if forme_juridique == "Micro-entreprise":
+                net_dispo_optimal = meilleur_avec_niches.get('net_final', 0)
+                net_dispo_classique = meilleur_classique.get('net_final', 0)
+                patrimoine_optimal = net_dispo_optimal  # Pas de distinction pour micro
+                patrimoine_classique = net_dispo_classique
+            else:
+                # Net disponible = cash réel après toutes les déductions
+                net_dispo_optimal = meilleur_avec_niches.get('net_disponible_immediat', meilleur_avec_niches.get('total_net', 0))
+                net_dispo_classique = meilleur_classique.get('net_disponible_immediat', meilleur_classique.get('total_net', 0))
+                # Patrimoine = net disponible + placements
+                patrimoine_optimal = meilleur_avec_niches.get('patrimoine_total', meilleur_avec_niches.get('total_net', 0))
+                patrimoine_classique = meilleur_classique.get('patrimoine_total', meilleur_classique.get('total_net', 0))
+
+            # Affichage des deux métriques
+            col_metric1, col_metric2 = st.columns(2)
+
+            with col_metric1:
+                delta_dispo = net_dispo_optimal - net_dispo_classique
+                st.metric(
+                    "💵 Net Disponible Immédiat",
+                    f"{net_dispo_optimal:,.0f}€",
+                    delta=f"{delta_dispo:+,.0f}€",
+                    help="Argent disponible immédiatement (après Girardin si applicable)"
+                )
+
+            with col_metric2:
+                delta_patrimoine = patrimoine_optimal - patrimoine_classique
+                if placements_optim > 0:
+                    st.metric(
+                        "🏦 Patrimoine Total",
+                        f"{patrimoine_optimal:,.0f}€",
+                        delta=f"{delta_patrimoine:+,.0f}€",
+                        help=f"Net disponible + Placements ({placements_optim:,.0f}€ : PER + Madelin Retraite)"
+                    )
+                else:
+                    st.metric(
+                        "🏦 Patrimoine Total",
+                        f"{patrimoine_optimal:,.0f}€",
+                        delta=f"{delta_patrimoine:+,.0f}€",
+                        help="Identique au net disponible (pas de placements)"
+                    )
             
             col_a, col_b, col_c = st.columns(3)
             
@@ -354,7 +402,7 @@ def main():
                 # Optimisations niveau entreprise
                 optimisations_entreprise_utilisees = []
                 if optimisations.get('madelin', 0) > 0:
-                    optimisations_entreprise_utilisees.append(f"🏥 Madelin (charge déductible) : {optimisations['madelin']:,.0f}€")
+                    optimisations_entreprise_utilisees.append(f"🏥 Madelin Retraite (charge déductible) : {optimisations['madelin']:,.0f}€")
                 
                 if optimisations.get('acre', False):
                     acre_economie = meilleur_avec_niches.get('acre_reduction', 0)
@@ -538,9 +586,9 @@ def main():
                     st.markdown(cotisations_detail_str)
                 
                 st.markdown(f"""
-                **Charge Madelin :** {meilleur_avec_niches.get('madelin_charge', 0):,.0f}€  
-                **Résultat après rémun. :** {meilleur_avec_niches['resultat_apres_remuneration']:,.0f}€  
-                
+                **Charge Madelin Retraite :** {meilleur_avec_niches.get('madelin_charge', 0):,.0f}€
+                **Résultat après rémun. :** {meilleur_avec_niches['resultat_apres_remuneration']:,.0f}€
+
                 """)
                 
                 with st.expander(f"**IS SARL :** {meilleur_avec_niches['is_sarl']:,.0f}€  "):
@@ -654,17 +702,17 @@ def main():
             
             with col_eco1:
                 if meilleur_avec_niches['optimisations']['per'] > 0:
-                    economie_per = meilleur_avec_niches.get('per_deduction', 0) * 0.30  # Estimation 30% d'économie
-                    st.metric("📈 PER", f"{meilleur_avec_niches['optimisations']['per']:,.0f}€", f"Économie: {economie_per:,.0f}€")
+                    economie_per = meilleur_avec_niches['optimisations'].get('economies_per', 0)  # Économie réelle calculée
+                    st.metric("📈 PER", f"{meilleur_avec_niches['optimisations']['per']:,.0f}€", f"Économie IR: {economie_per:,.0f}€")
                 else:
                     st.metric("📈 PER", "Non utilisé", "0€")
             
             with col_eco2:
                 if meilleur_avec_niches['optimisations']['madelin'] > 0:
                     economie_madelin = meilleur_avec_niches.get('economie_is_madelin', 0)  # Économie d'IS
-                    st.metric("🏥 Madelin (charge)", f"{meilleur_avec_niches['optimisations']['madelin']:,.0f}€", f"Économie IS: {economie_madelin:,.0f}€")
+                    st.metric("🏥 Madelin Retraite (charge)", f"{meilleur_avec_niches['optimisations']['madelin']:,.0f}€", f"Économie IS: {economie_madelin:,.0f}€")
                 else:
-                    st.metric("🏥 Madelin", "Non utilisé", "0€")
+                    st.metric("🏥 Madelin Retraite", "Non utilisé", "0€")
             
             with col_eco3:
                 if meilleur_avec_niches['optimisations'].get('acre', False):
@@ -676,21 +724,43 @@ def main():
                     st.metric("🎆 ACRE / 🏭 Girardin", "Non utilisé", "0€")
             
             with col_eco4:
-                st.metric("💰 TOTAL ÉCONOMIES", f"{meilleur_avec_niches['optimisations']['economies_totales']:,.0f}€", f"vs sans optim: +{meilleur_avec_niches['total_net'] - meilleur_classique['total_net']:,.0f}€")
+                gain_patrimoine = meilleur_avec_niches.get('patrimoine_total', meilleur_avec_niches['total_net']) - meilleur_classique.get('patrimoine_total', meilleur_classique['total_net'])
+                st.metric("💰 TOTAL ÉCONOMIES", f"{meilleur_avec_niches['optimisations']['economies_totales']:,.0f}€", f"Gain patrimoine: +{gain_patrimoine:,.0f}€")
         
         # Comparaison avec/sans optimisations
         st.subheader("⚖️ Comparaison Avec/Sans Optimisations")
-        col_comp1, col_comp2, col_comp3 = st.columns(3)
-        
+
+        # Calcul des montants pour la comparaison
+        patrimoine_sans = meilleur_classique.get('patrimoine_total', meilleur_classique['total_net'])
+        patrimoine_avec = meilleur_avec_niches.get('patrimoine_total', meilleur_avec_niches['total_net'])
+        net_dispo_sans = meilleur_classique.get('net_disponible_immediat', patrimoine_sans)
+        net_dispo_avec = meilleur_avec_niches.get('net_disponible_immediat', patrimoine_avec)
+        placements = meilleur_avec_niches.get('placements_total', 0)
+
+        col_comp1, col_comp2, col_comp3, col_comp4 = st.columns(4)
+
         with col_comp1:
-            st.metric("💰 Sans optimisations", f"{meilleur_classique['total_net']:,.0f}€", "Référence")
-        
+            st.metric("💰 Sans optimisations",
+                     f"{patrimoine_sans:,.0f}€",
+                     "Patrimoine de référence")
+
         with col_comp2:
-            st.metric("🎯 Avec optimisations", f"{meilleur_avec_niches['total_net']:,.0f}€", f"+{meilleur_avec_niches['total_net'] - meilleur_classique['total_net']:,.0f}€")
-        
+            gain_dispo = net_dispo_avec - net_dispo_sans
+            st.metric("💵 Net Disponible",
+                     f"{net_dispo_avec:,.0f}€",
+                     f"{gain_dispo:+,.0f}€")
+
         with col_comp3:
-            amelioration = ((meilleur_avec_niches['total_net'] / meilleur_classique['total_net']) - 1) * 100
-            st.metric("📈 Amélioration", f"+{amelioration:.1f}%", f"Gain: {meilleur_avec_niches['total_net'] - meilleur_classique['total_net']:,.0f}€")
+            st.metric("🏦 Placements",
+                     f"{placements:,.0f}€",
+                     "PER + Madelin Retraite")
+
+        with col_comp4:
+            gain_patrimoine = patrimoine_avec - patrimoine_sans
+            amelioration = ((patrimoine_avec / patrimoine_sans) - 1) * 100 if patrimoine_sans > 0 else 0
+            st.metric("📈 Patrimoine Total",
+                     f"{patrimoine_avec:,.0f}€",
+                     f"{gain_patrimoine:+,.0f}€ ({amelioration:+.1f}%)")
         
         # Graphique d'optimisation unique
         st.subheader("📈 Analyse Détaillée")

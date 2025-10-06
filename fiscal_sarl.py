@@ -10,9 +10,9 @@ class SARL(OptimisationFiscale):
     """Optimisation pour SARL seule (sans holding)"""
     
     def __init__(self, resultat_avant_remuneration=300000, charges_existantes=50000, parts_fiscales=1,
-                 per_max=None, madelin_max=None, girardin_max=None):
+                 per_max=None, madelin_max=None, girardin_max=None, plafond_per_disponible=None):
         super().__init__(resultat_avant_remuneration, charges_existantes, parts_fiscales,
-                         per_max, madelin_max, girardin_max)
+                         per_max, madelin_max, girardin_max, plafond_per_disponible)
     
     def get_nom_forme_juridique(self):
         return "SARL"
@@ -47,7 +47,7 @@ class SARL(OptimisationFiscale):
         resultats['ir_detail'] = ir_detail
         resultats['remuneration_nette_avant_ir'] = remuneration_gerance
         
-        # 4. Madelin (charge déductible du résultat avant rémunération)
+        # 4. Madelin Retraite (charge déductible du résultat avant rémunération)
         madelin_charge = min(madelin_montant, PLAFOND_MADELIN_TNS)
         resultat_apres_remuneration = self.resultat_avant_remuneration - madelin_charge - remuneration_gerance - cotisations_tns
         resultats['madelin_charge'] = madelin_charge
@@ -63,27 +63,17 @@ class SARL(OptimisationFiscale):
         dividendes_bruts = resultat_apres_remuneration - is_total
         resultats['dividendes_bruts'] = dividendes_bruts
         resultats['dividendes_sarl'] = dividendes_bruts  # Alias pour compatibilité
-        
-        # 7. Imposition dividendes - choisir entre flat tax et barème
+
+        # 7. Imposition dividendes - TOUJOURS flat tax (30%)
+        # La flat tax (30%) = 12.8% IR + 17.2% prélèvements sociaux
         flat_tax = dividendes_bruts * TAUX_FLAT_TAX
-        prelevements_sociaux = dividendes_bruts * TAUX_PRELEVEMENTS_SOCIAUX_DIVIDENDES
-        ir_dividendes, _ = self.calculer_ir(dividendes_bruts * 0.6)  # Abattement 40%
-        option_bareme = prelevements_sociaux + ir_dividendes
-        
-        if option_bareme < flat_tax and dividendes_bruts > 0:
-            resultats['option_fiscale'] = 'barème'
-            resultats['prelevements_sociaux'] = prelevements_sociaux
-            resultats['ir_dividendes'] = ir_dividendes
-            resultats['flat_tax'] = 0
-            dividendes_nets = dividendes_bruts - option_bareme
-        else:
-            resultats['option_fiscale'] = 'flat_tax'
-            resultats['prelevements_sociaux'] = 0
-            resultats['ir_dividendes'] = 0
-            resultats['flat_tax'] = flat_tax
-            dividendes_nets = dividendes_bruts - flat_tax
-        
+        dividendes_nets = dividendes_bruts - flat_tax
+
+        resultats['option_fiscale'] = 'flat_tax'
+        resultats['flat_tax'] = flat_tax
         resultats['dividendes_nets'] = dividendes_nets
+        resultats['prelevements_sociaux'] = 0  # Inclus dans flat_tax
+        resultats['ir_dividendes'] = 0  # Inclus dans flat_tax
         
         # 8. Total net de base (avant PER/Girardin)
         remuneration_nette_base = remuneration_gerance - ir_base
@@ -92,24 +82,20 @@ class SARL(OptimisationFiscale):
         
         # Calcul du taux de prélèvement sur les dividendes
         if resultat_apres_remuneration > 0:
-            if resultats['option_fiscale'] == 'flat_tax':
-                prelevements_dividendes = is_total + flat_tax
-            else:
-                prelevements_dividendes = is_total + prelevements_sociaux + ir_dividendes
+            prelevements_dividendes = is_total + flat_tax
             taux_prelevement_dividendes = (prelevements_dividendes / resultat_apres_remuneration) * 100
         else:
             taux_prelevement_dividendes = 0
-        
-        # Calcul du taux de prélèvement sur les dividendes  
+
         resultats['taux_prelevement_dividendes'] = taux_prelevement_dividendes
-        
+
         resultats['optimisations'] = {
             'madelin': madelin_montant,
             'economies_totales': madelin_charge * TAUX_ECONOMIE_IS_MADELIN  # PER/Girardin ajoutés dans la base
         }
-        
+
         # Calcul du taux de prélèvement global
-        total_prelevements = cotisations_tns + ir_base + is_total + (flat_tax if resultats['option_fiscale'] == 'flat_tax' else prelevements_sociaux + ir_dividendes)
+        total_prelevements = cotisations_tns + ir_base + is_total + flat_tax
         if self.resultat_initial > 0:
             taux_prelevement_global = (total_prelevements / self.resultat_initial) * 100
         else:

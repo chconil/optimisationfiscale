@@ -10,14 +10,16 @@ from parametres_fiscaux import *
 class OptimisationFiscale(ABC):
     """Classe de base pour tous les régimes fiscaux"""
     
-    def __init__(self, resultat_avant_remuneration=300000, charges_existantes=50000, parts_fiscales=1, 
-                 per_max=None, madelin_max=None, girardin_max=None):
+    def __init__(self, resultat_avant_remuneration=300000, charges_existantes=50000, parts_fiscales=1,
+                 per_max=None, madelin_max=None, girardin_max=None, plafond_per_disponible=None):
         self.resultat_initial = resultat_avant_remuneration
         self.charges = charges_existantes
-        self.resultat_avant_remuneration = resultat_avant_remuneration - charges_existantes 
+        self.resultat_avant_remuneration = resultat_avant_remuneration - charges_existantes
         self.parts_fiscales = parts_fiscales
-        
+
         # Paramètres d'optimisation
+        # Le plafond PER disponible peut être personnalisé (10% revenus N-1 + reports)
+        self.plafond_per_disponible = plafond_per_disponible if plafond_per_disponible is not None else PLAFOND_PER
         self.per_max = per_max if per_max is not None else PLAFOND_PER
         self.madelin_max = madelin_max if madelin_max is not None else 0
         self.girardin_max = girardin_max if girardin_max is not None else 50000
@@ -116,50 +118,76 @@ class OptimisationFiscale(ABC):
     def appliquer_optimisations_personnelles(self, scenario_base, per_montant=0, girardin_montant=0):
         """Applique PER et Girardin sur un scénario de base - commun à toutes les formes"""
         scenario = scenario_base.copy()
-        
+
         # Sécurisation des types
         per_montant = float(per_montant) if per_montant else 0
         girardin_montant = float(girardin_montant) if girardin_montant else 0
-        
+
         # Récupère le revenu imposable de base
         revenu_imposable_base = float(scenario.get('revenu_imposable', 0))
-        
+
         # 1. Application du PER
-        per_deduction = min(per_montant, min(revenu_imposable_base * 0.10, PLAFOND_PER))
-        revenu_imposable_final = revenu_imposable_base - per_deduction
+        # Le PER est plafonné au plafond disponible (10% revenus N-1 + reports)
+        # et ne peut pas dépasser le revenu imposable de l'année
+        per_deduction = min(per_montant, self.plafond_per_disponible, revenu_imposable_base)
+        revenu_imposable_final = max(0, revenu_imposable_base - per_deduction)
         
         scenario['per_deduction'] = per_deduction
         scenario['revenu_imposable_final'] = revenu_imposable_final
-        
-        # 2. Recalcul de l'IR avec Girardin
+
+        # 2. Calcul de l'économie PER réelle
+        # Économie = différence d'IR sans PER vs avec PER
+        ir_sans_per, _ = self.calculer_ir(revenu_imposable_base)
+        ir_avec_per, _ = self.calculer_ir(revenu_imposable_final)
+        economie_per_reelle = ir_sans_per - ir_avec_per
+
+        # 3. Recalcul de l'IR avec Girardin
         ir_resultats = self.calculer_ir_avec_girardin(revenu_imposable_final, girardin_montant)
         scenario.update(ir_resultats)
-        
-        # 3. Mise à jour du net final avec les optimisations personnelles
+
+        # 4. Mise à jour du net final avec les optimisations personnelles
         remuneration_nette_avant_ir = float(scenario.get('remuneration_nette_avant_ir', 0))
-        scenario['remuneration_nette_apres_ir'] = remuneration_nette_avant_ir - ir_resultats['ir_final']
-        
-        # 4. Déduction de l'investissement Girardin du total net
-        total_net_base = float(scenario.get('total_net', 0))
-        scenario['total_net'] = total_net_base - girardin_montant
-        
-        # 5. Mise à jour des optimisations
+        remuneration_nette_apres_ir = remuneration_nette_avant_ir - ir_resultats['ir_final']
+        scenario['remuneration_nette_apres_ir'] = remuneration_nette_apres_ir
+
+        # 5. Calcul du net disponible immédiat (cash après versements Girardin et PER)
+        # Le net disponible = rémunération nette (après IR avec PER et Girardin) + dividendes - versements
+        dividendes_nets = float(scenario.get('dividendes_nets', 0))
+        net_disponible_immediat = remuneration_nette_apres_ir + dividendes_nets - girardin_montant - per_deduction
+        scenario['net_disponible_immediat'] = net_disponible_immediat
+
+        # 6. Calcul des placements (PER + Madelin Retraite)
+        # Le Madelin Retraite est stocké dans madelin_charge (charge déductible de l'entreprise)
+        madelin_charge = float(scenario.get('madelin_charge', 0))
+        placements_total = per_deduction + madelin_charge
+        scenario['placements_total'] = placements_total
+
+        # 7. Patrimoine total = Net disponible + Placements
+        # Le Girardin a déjà été déduit du net disponible (c'est une vraie dépense)
+        # Le PER et Madelin Retraite sont des placements qui ont de la valeur
+        patrimoine_total = net_disponible_immediat + placements_total
+        scenario['patrimoine_total'] = patrimoine_total
+
+        # Pour compatibilité : total_net pointe maintenant vers patrimoine_total
+        scenario['total_net'] = patrimoine_total
+
+        # 8. Mise à jour des optimisations
         if 'optimisations' not in scenario:
             scenario['optimisations'] = {}
-        
+
         scenario['optimisations'].update({
             'per': per_montant,
             'girardin': girardin_montant,
-            'economies_per': per_deduction * TAUX_ECONOMIE_PER,
+            'economies_per': economie_per_reelle,  # Calcul réel au lieu de l'approximation
             'economies_girardin': ir_resultats['reduction_girardin'],
         })
-        
+
         # Recalcul des économies totales
-        economies_totales = (float(scenario['optimisations'].get('economies_totales', 0)) + 
-                           scenario['optimisations']['economies_per'] + 
+        economies_totales = (float(scenario['optimisations'].get('economies_totales', 0)) +
+                           scenario['optimisations']['economies_per'] +
                            scenario['optimisations']['economies_girardin'])
         scenario['optimisations']['economies_totales'] = economies_totales
-        
+
         return scenario
     
     def calculer_scenario(self, remuneration, per_montant=0, girardin_montant=0, **kwargs):
