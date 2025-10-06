@@ -72,6 +72,13 @@ PLAFOND_PER = 32419  # Plan Épargne Retraite (8 x PASS 2024)
 PLAFOND_MADELIN_TNS = 84000  # Madelin Retraite TNS 2024
 TAUX_GIRARDIN_INDUSTRIEL = 1.10  # 110% de réduction d'impôt
 
+# PEE/PERCO (Plan Épargne Entreprise - SAS uniquement)
+PASS = 46368  # Plafond Annuel Sécurité Sociale 2024
+PLAFOND_ABONDEMENT_PEE = int(PASS * 0.08)  # 8% du PASS = 3,709€
+TAUX_ABONDEMENT_MAX = 3.0  # 300% du versement salarié
+LIMITE_VERSEMENT_PEE_SALARIE = 0.25  # 25% de la rémunération brute
+TAUX_CSG_CRDS_ABONDEMENT = 0.097  # 9.7% sur l'abondement
+
 # Plafonds retraite et allocations familiales
 PLAFOND_RETRAITE_BASE = 46368  # 1 PASS 2024
 SEUIL_ALLOCATIONS_FAMILIALES_REDUIT = 162288  # 3.5 PASS 2024
@@ -91,7 +98,7 @@ FORMES_JURIDIQUES_CONFIG = {
         'type_revenus': 'ca'
     },
     'SAS': {
-        'optimisations_disponibles': ['per', 'girardin'],
+        'optimisations_disponibles': ['per', 'girardin', 'pee'],
         'calcul_cotisations': 'assimile_salarie',
         'type_revenus': 'salaire_dividendes'
     },

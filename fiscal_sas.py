@@ -20,12 +20,24 @@ class SAS(OptimisationFiscale):
     def get_optimisations_disponibles(self):
         return get_optimisations_disponibles('SAS')
     
-    def calculer_scenario_base(self, salaire_brut, **kwargs):
+    def calculer_scenario_base(self, salaire_brut, versement_pee=0, **kwargs):
         """Calcule un scénario SAS"""
         resultats = {'forme_juridique': 'SAS'}
-        
+
         resultats['salaire_brut'] = salaire_brut
         resultats['remuneration_brute'] = salaire_brut  # Alias pour compatibilité avec l'interface
+
+        # PEE/PERCO : Calcul de l'abondement employeur
+        # Versement salarié limité à 25% du salaire brut
+        versement_pee = min(versement_pee, salaire_brut * LIMITE_VERSEMENT_PEE_SALARIE)
+        # Abondement = 300% du versement, plafonné à 8% du PASS (3,709€)
+        abondement_pee = min(versement_pee * TAUX_ABONDEMENT_MAX, PLAFOND_ABONDEMENT_PEE)
+        # Coût abondement pour l'entreprise (abondement + CSG/CRDS 9.7%)
+        cout_abondement = abondement_pee * (1 + TAUX_CSG_CRDS_ABONDEMENT)
+
+        resultats['versement_pee'] = versement_pee
+        resultats['abondement_pee'] = abondement_pee
+        resultats['cout_abondement_pee'] = cout_abondement
         
         # Cotisations
         cotisations_salariales = salaire_brut * TAUX_COTISATIONS_SALARIE
@@ -53,10 +65,14 @@ class SAS(OptimisationFiscale):
         
         # Salaire net de base
         resultats['remuneration_nette_avant_ir'] = remuneration_nette_avant_ir
-        
-        # Résultat après charges sociales et salaires
-        resultat_apres_remuneration = self.resultat_avant_remuneration - cout_total_salaire
+
+        # Résultat après charges sociales, salaires et abondement PEE
+        resultat_apres_remuneration = self.resultat_avant_remuneration - cout_total_salaire - cout_abondement
         resultats['resultat_apres_remuneration'] = resultat_apres_remuneration
+
+        # Économie IS sur l'abondement (charge déductible)
+        economie_is_abondement = cout_abondement * 0.25  # Approximation avec taux moyen IS
+        resultats['economie_is_abondement'] = economie_is_abondement
         
         # IS
         is_total, is_detail = self.calculer_is(resultat_apres_remuneration)
@@ -91,7 +107,10 @@ class SAS(OptimisationFiscale):
         
         resultats['optimisations'] = {
             'madelin': 0,
-            'economies_totales': 0  # Sera calculé dans la base
+            'pee': versement_pee,
+            'abondement_pee': abondement_pee,
+            'economie_is_abondement': economie_is_abondement,
+            'economies_totales': economie_is_abondement  # PER/Girardin/PEE ajoutés dans la base
         }
         
         # Calcul du taux de prélèvement global

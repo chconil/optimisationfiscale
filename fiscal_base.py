@@ -130,16 +130,32 @@ class OptimisationFiscale(ABC):
         # Le PER est plafonné au plafond disponible (10% revenus N-1 + reports)
         # et ne peut pas dépasser le revenu imposable de l'année
         per_deduction = min(per_montant, self.plafond_per_disponible, revenu_imposable_base)
-        revenu_imposable_final = max(0, revenu_imposable_base - per_deduction)
-        
+        revenu_apres_per = max(0, revenu_imposable_base - per_deduction)
+
         scenario['per_deduction'] = per_deduction
+
+        # 1b. Application du PEE/PERCO (versement salarié exonéré d'IR)
+        # Récupère le versement PEE depuis le scénario de base
+        versement_pee = float(scenario.get('versement_pee', 0))
+        abondement_pee = float(scenario.get('abondement_pee', 0))
+
+        # Le versement PEE est exonéré d'IR (déduit du revenu imposable)
+        pee_deduction = min(versement_pee, revenu_apres_per)
+        revenu_imposable_final = max(0, revenu_apres_per - pee_deduction)
+
+        scenario['pee_deduction'] = pee_deduction
         scenario['revenu_imposable_final'] = revenu_imposable_final
 
-        # 2. Calcul de l'économie PER réelle
-        # Économie = différence d'IR sans PER vs avec PER
+        # 2. Calcul de l'économie PER et PEE réelle
+        # Économie = différence d'IR sans PER/PEE vs avec PER/PEE
         ir_sans_per, _ = self.calculer_ir(revenu_imposable_base)
-        ir_avec_per, _ = self.calculer_ir(revenu_imposable_final)
-        economie_per_reelle = ir_sans_per - ir_avec_per
+        ir_avec_per_pee, _ = self.calculer_ir(revenu_imposable_final)
+        economie_per_pee = ir_sans_per - ir_avec_per_pee
+
+        # Pour distinguer l'économie PER de l'économie PEE, on calcule l'IR intermédiaire
+        ir_avec_per_seulement, _ = self.calculer_ir(revenu_apres_per)
+        economie_per_reelle = ir_sans_per - ir_avec_per_seulement
+        economie_pee_reelle = ir_avec_per_seulement - ir_avec_per_pee
 
         # 3. Recalcul de l'IR avec Girardin
         ir_resultats = self.calculer_ir_avec_girardin(revenu_imposable_final, girardin_montant)
@@ -150,21 +166,24 @@ class OptimisationFiscale(ABC):
         remuneration_nette_apres_ir = remuneration_nette_avant_ir - ir_resultats['ir_final']
         scenario['remuneration_nette_apres_ir'] = remuneration_nette_apres_ir
 
-        # 5. Calcul du net disponible immédiat (cash après versements Girardin et PER)
-        # Le net disponible = rémunération nette (après IR avec PER et Girardin) + dividendes - versements
+        # 5. Calcul du net disponible immédiat (cash après versements Girardin, PER et PEE)
+        # Le net disponible = rémunération nette (après IR avec PER/PEE et Girardin) + dividendes - versements
         dividendes_nets = float(scenario.get('dividendes_nets', 0))
-        net_disponible_immediat = remuneration_nette_apres_ir + dividendes_nets - girardin_montant - per_deduction
+        net_disponible_immediat = remuneration_nette_apres_ir + dividendes_nets - girardin_montant - per_deduction - pee_deduction
         scenario['net_disponible_immediat'] = net_disponible_immediat
 
-        # 6. Calcul des placements (PER + Madelin Retraite)
+        # 6. Calcul des placements (PER + Madelin Retraite + PEE + Abondement)
         # Le Madelin Retraite est stocké dans madelin_charge (charge déductible de l'entreprise)
+        # Le PEE = versement salarié + abondement employeur
         madelin_charge = float(scenario.get('madelin_charge', 0))
-        placements_total = per_deduction + madelin_charge
+        placements_pee = pee_deduction + abondement_pee
+        placements_total = per_deduction + madelin_charge + placements_pee
         scenario['placements_total'] = placements_total
+        scenario['placements_pee'] = placements_pee
 
         # 7. Patrimoine total = Net disponible + Placements
         # Le Girardin a déjà été déduit du net disponible (c'est une vraie dépense)
-        # Le PER et Madelin Retraite sont des placements qui ont de la valeur
+        # Le PER, Madelin Retraite et PEE (+ abondement) sont des placements qui ont de la valeur
         patrimoine_total = net_disponible_immediat + placements_total
         scenario['patrimoine_total'] = patrimoine_total
 
@@ -180,12 +199,16 @@ class OptimisationFiscale(ABC):
             'girardin': girardin_montant,
             'economies_per': economie_per_reelle,  # Calcul réel au lieu de l'approximation
             'economies_girardin': ir_resultats['reduction_girardin'],
+            'economies_pee': economie_pee_reelle,  # Économie IR sur versement PEE
         })
 
         # Recalcul des économies totales
-        economies_totales = (float(scenario['optimisations'].get('economies_totales', 0)) +
+        # Inclut les économies IS (Madelin, Abondement PEE) + économies IR (PER, PEE, Girardin)
+        economies_base = float(scenario['optimisations'].get('economies_totales', 0))
+        economies_totales = (economies_base +
                            scenario['optimisations']['economies_per'] +
-                           scenario['optimisations']['economies_girardin'])
+                           scenario['optimisations']['economies_girardin'] +
+                           scenario['optimisations']['economies_pee'])
         scenario['optimisations']['economies_totales'] = economies_totales
 
         return scenario
@@ -219,20 +242,21 @@ class OptimisationFiscale(ABC):
         """Retourne la métrique à optimiser (peut être surchargé)"""
         return scenario.get('total_net', 0)
     
-    def optimiser(self, pas=5000, per_max=0, madelin_max=0, girardin_max=0, acre=False, **kwargs):
+    def optimiser(self, pas=5000, per_max=0, madelin_max=0, girardin_max=0, versement_pee=0, acre=False, **kwargs):
         """Méthode commune d'optimisation pour toutes les formes juridiques"""
         meilleur_scenario = None
         tous_scenarios = []
-        
+
         # Obtient la plage de rémunération à tester
         range_remuneration = self.get_range_remuneration(pas)
-        
+
         for remuneration in range_remuneration:
             # Prépare les arguments pour calculer_scenario avec les montants exacts de l'interface
             scenario_kwargs = {
                 'per_montant': per_max,
                 'madelin_montant': madelin_max,
                 'girardin_montant': girardin_max,
+                'versement_pee': versement_pee,
                 'acre': acre
             }
             

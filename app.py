@@ -145,7 +145,7 @@ def main():
             st.info("💎 **Dividendes** : La flat tax (30%) est toujours appliquée pour simplifier les calculs.")
 
         # Optimisations fiscales - Niveau IR Personnel
-        optimisations_ir = [opt for opt in optimisations_disponibles if opt in ['per', 'girardin']]
+        optimisations_ir = [opt for opt in optimisations_disponibles if opt in ['per', 'girardin', 'pee']]
         if optimisations_ir:
             st.subheader("👤 Optimisations Niveau IR Personnel")
             st.markdown("*Déductions et réductions d'impôt sur le revenu*")
@@ -194,11 +194,31 @@ def main():
                         step=1000,
                         help="Montant de l'investissement (dépense) qui génère la réduction d'impôt"
                     )
+
+            # PEE/PERCO (seulement pour SAS)
+            use_pee = False
+            versement_pee = 0
+            if 'pee' in optimisations_disponibles:
+                use_pee = st.checkbox(
+                    "💼 Plan d'Épargne Entreprise (PEE/PERCO)",
+                    help="Versement salarié + abondement employeur. Le versement est exonéré d'IR et l'abondement (max 3,709€) est une charge déductible de l'IS."
+                )
+                if use_pee:
+                    versement_pee = st.slider(
+                        "Versement salarié PEE (€)",
+                        min_value=0,
+                        max_value=10000,
+                        value=3000,
+                        step=100,
+                        help="Votre versement (max 25% du salaire brut). L'abondement employeur sera de 300% (max 3,709€)."
+                    )
         else:
             use_per = False
             per_max = 0
             use_girardin = False
             girardin_max = 0
+            use_pee = False
+            versement_pee = 0
         
         # Paramètres de calcul
         st.subheader("⚙️ Paramètres de calcul")
@@ -235,6 +255,7 @@ def main():
                     pas=pas_calcul,
                     per_max=per_max if use_per else 0,
                     madelin_max=madelin_max if use_madelin else 0,
+                    versement_pee=versement_pee if use_pee else 0,
                     acre=use_acre
                 )
                 # Adapter format pour compatibilité
@@ -245,7 +266,8 @@ def main():
                     pas=pas_calcul,
                     per_max=per_max if use_per else 0,
                     madelin_max=madelin_max if use_madelin else 0,
-                    girardin_max=girardin_max if use_girardin else 0
+                    girardin_max=girardin_max if use_girardin else 0,
+                    versement_pee=versement_pee if use_pee else 0
                 )
                 # Adapter format pour compatibilité
                 tous_scenarios_niches = [{'scenarios': tous_scenarios, 'meilleur': meilleur_global}]
@@ -255,7 +277,8 @@ def main():
                     pas=pas_calcul,
                     per_max=per_max if use_per else 0,
                     madelin_max=madelin_max if use_madelin else 0,
-                    girardin_max=girardin_max if use_girardin else 0
+                    girardin_max=girardin_max if use_girardin else 0,
+                    versement_pee=versement_pee if use_pee else 0
                 )
                 # Adapter format pour compatibilité
                 tous_scenarios_niches = [{'scenarios': tous_scenarios, 'meilleur': meilleur_global}]
@@ -326,7 +349,7 @@ def main():
                         "🏦 Patrimoine Total",
                         f"{patrimoine_optimal:,.0f}€",
                         delta=f"{delta_patrimoine:+,.0f}€",
-                        help=f"Net disponible + Placements ({placements_optim:,.0f}€ : PER + Madelin Retraite)"
+                        help=f"Net disponible + Placements ({placements_optim:,.0f}€ : PER + Madelin Retraite + PEE)"
                     )
                 else:
                     st.metric(
@@ -396,7 +419,7 @@ def main():
             
             # Détail des optimisations
             optimisations = meilleur_avec_niches.get('optimisations', {})
-            if any(optimisations.get(k, 0) > 0 or optimisations.get(k, False) for k in ['per', 'madelin', 'girardin', 'acre']):
+            if any(optimisations.get(k, 0) > 0 or optimisations.get(k, False) for k in ['per', 'madelin', 'girardin', 'pee', 'acre']):
                 st.subheader("🎯 Optimisations Utilisées")
                 
                 # Optimisations niveau entreprise
@@ -421,7 +444,16 @@ def main():
                 if optimisations.get('girardin', 0) > 0:
                     reduction_girardin = meilleur_avec_niches.get('reduction_girardin', 0)
                     optimisations_ir_utilisees.append(f"🏭 Girardin (réduction IR) : {optimisations['girardin']:,.0f}€ → -{reduction_girardin:,.0f}€ d'IR")
-                
+
+                if optimisations.get('pee', 0) > 0:
+                    abondement = meilleur_avec_niches.get('abondement_pee', 0)
+                    placements_pee = meilleur_avec_niches.get('placements_pee', 0)
+                    economie_ir_pee = optimisations.get('economies_pee', 0)
+                    economie_is_abondement = meilleur_avec_niches.get('economie_is_abondement', 0)
+                    optimisations_ir_utilisees.append(
+                        f"💼 PEE/PERCO : Versement {optimisations['pee']:,.0f}€ + Abondement {abondement:,.0f}€ = {placements_pee:,.0f}€ de placement (Économie IR: {economie_ir_pee:,.0f}€ + IS: {economie_is_abondement:,.0f}€)"
+                    )
+
                 if optimisations_ir_utilisees:
                     st.markdown("**👤 Niveau IR Personnel :**")
                     for opt in optimisations_ir_utilisees:
@@ -692,7 +724,7 @@ def main():
         
         # Tableau récapitulatif des économies d'impôts si optimisations
         optimisations_actives = (
-            any(meilleur_avec_niches['optimisations'].get(k, 0) > 0 for k in ['per', 'madelin', 'girardin']) or
+            any(meilleur_avec_niches['optimisations'].get(k, 0) > 0 for k in ['per', 'madelin', 'girardin', 'pee']) or
             meilleur_avec_niches['optimisations'].get('acre', False)
         )
         if optimisations_actives:
@@ -715,13 +747,18 @@ def main():
                     st.metric("🏥 Madelin Retraite", "Non utilisé", "0€")
             
             with col_eco3:
-                if meilleur_avec_niches['optimisations'].get('acre', False):
+                if meilleur_avec_niches['optimisations'].get('pee', 0) > 0:
+                    abondement_pee = meilleur_avec_niches.get('abondement_pee', 0)
+                    placements_pee = meilleur_avec_niches.get('placements_pee', 0)
+                    economie_totale_pee = meilleur_avec_niches['optimisations'].get('economies_pee', 0) + meilleur_avec_niches.get('economie_is_abondement', 0)
+                    st.metric("💼 PEE/PERCO", f"{placements_pee:,.0f}€", f"Dont abondement: {abondement_pee:,.0f}€")
+                elif meilleur_avec_niches['optimisations'].get('acre', False):
                     acre_economie = meilleur_avec_niches.get('acre_reduction', 0)
                     st.metric("🎆 ACRE", "Activée", f"Économie: {acre_economie:,.0f}€")
                 elif meilleur_avec_niches['optimisations'].get('girardin', 0) > 0:
                     st.metric("🏭 Girardin", f"{meilleur_avec_niches['optimisations']['girardin']:,.0f}€", f"Réduction: {meilleur_avec_niches.get('reduction_girardin', 0):,.0f}€")
                 else:
-                    st.metric("🎆 ACRE / 🏭 Girardin", "Non utilisé", "0€")
+                    st.metric("💼 PEE / 🎆 ACRE / 🏭 Girardin", "Non utilisé", "0€")
             
             with col_eco4:
                 gain_patrimoine = meilleur_avec_niches.get('patrimoine_total', meilleur_avec_niches['total_net']) - meilleur_classique.get('patrimoine_total', meilleur_classique['total_net'])
@@ -753,7 +790,7 @@ def main():
         with col_comp3:
             st.metric("🏦 Placements",
                      f"{placements:,.0f}€",
-                     "PER + Madelin Retraite")
+                     "PER + Madelin Retraite + PEE")
 
         with col_comp4:
             gain_patrimoine = patrimoine_avec - patrimoine_sans
