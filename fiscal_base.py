@@ -48,11 +48,11 @@ class OptimisationFiscale(ABC):
                 ir_par_part += ir_tranche
                 
                 details.append({
-                    'de': tranche_precedente,
-                    'a': tranche_precedente + montant_dans_tranche,
+                    'de': tranche_precedente * self.parts_fiscales,
+                    'a': (tranche_precedente + montant_dans_tranche) * self.parts_fiscales,
                     'taux': tranche['taux'],
-                    'base': montant_dans_tranche,
-                    'impot': ir_tranche
+                    'base': montant_dans_tranche * self.parts_fiscales,
+                    'impot': ir_tranche * self.parts_fiscales
                 })
             
             revenu_restant -= montant_dans_tranche
