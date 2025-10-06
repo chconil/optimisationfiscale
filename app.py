@@ -140,10 +140,6 @@ def main():
             madelin_max = 0
             use_acre = False
         
-        # Note fiscalité des dividendes
-        if forme_juridique in ['SARL', 'SARL + Holding', 'SAS']:
-            st.info("💎 **Dividendes** : La flat tax (30%) est toujours appliquée pour simplifier les calculs.")
-
         # Optimisations fiscales - Niveau IR Personnel
         optimisations_ir = [opt for opt in optimisations_disponibles if opt in ['per', 'girardin', 'pee']]
         if optimisations_ir:
