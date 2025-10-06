@@ -232,10 +232,14 @@ class OptimisationFiscale(ABC):
 
         # Recalcul des économies totales
         # Inclut les économies IS (Madelin, Abondement PEE) + économies IR (PER, PEE, Girardin)
+        # Pour le Girardin : économie nette = réduction IR - investissement (car pas de placement)
+        economies_girardin_nette = scenario['optimisations']['economies_girardin'] - girardin_montant
+        scenario['optimisations']['economies_girardin_nette'] = economies_girardin_nette
+
         economies_base = float(scenario['optimisations'].get('economies_totales', 0))
         economies_totales = (economies_base +
                            scenario['optimisations']['economies_per'] +
-                           scenario['optimisations']['economies_girardin'] +
+                           economies_girardin_nette +
                            scenario['optimisations']['economies_pee'])
         scenario['optimisations']['economies_totales'] = economies_totales
 
