@@ -496,7 +496,6 @@ def main():
                 
                 st.markdown(f"""
                 **Net avant charges :** {meilleur_avec_niches.get('net_avant_charges', 0):,.0f}€  
-                **Charges réelles :** {meilleur_avec_niches.get('charges_reelles', 0):,.0f}€  
                 **Net final :** {meilleur_avec_niches.get('net_final', 0):,.0f}€  
                 
                 """)
@@ -551,26 +550,15 @@ def main():
         
         with col_resume2:
             st.markdown("#### 💼 NIVEAU PERSONNEL")
-            if forme_juridique == "SAS":
-                st.markdown(f"""
-                **Salaire net avant IR :** {meilleur_avec_niches.get('salaire_net_avant_ir', meilleur_avec_niches['remuneration_nette_avant_ir']):,.0f}€  
-                **Abattement frais pro (10%) :** {meilleur_avec_niches['abattement_frais_pro']:,.0f}€  
-                **Revenu imposable initial :** {meilleur_avec_niches['revenu_imposable']:,.0f}€  
-                
-                **Déductions fiscales :**  
-                • PER : {meilleur_avec_niches.get('per_deduction', 0):,.0f}€  
-                **Revenu imposable final :** {meilleur_avec_niches.get('revenu_imposable_final', meilleur_avec_niches['revenu_imposable']):,.0f}€  
-                """)
-            else:
-                st.markdown(f"""
-                **Rémunération nette avant IR :** {meilleur_avec_niches['remuneration_nette_avant_ir']:,.0f}€  
-                **Abattement frais pro (10%) :** {meilleur_avec_niches['abattement_frais_pro']:,.0f}€  
-                **Revenu imposable initial :** {meilleur_avec_niches['revenu_imposable']:,.0f}€  
-                
-                **Déductions fiscales :**  
-                • PER : {meilleur_avec_niches.get('per_deduction', 0):,.0f}€  
-                **Revenu imposable final :** {meilleur_avec_niches.get('revenu_imposable_final', meilleur_avec_niches['revenu_imposable']):,.0f}€  
-                """)
+            st.markdown(f"""
+            **Rémunération nette avant IR :** {meilleur_avec_niches['remuneration_nette_avant_ir']:,.0f}€  
+            **Abattement frais pro (10%) :** {meilleur_avec_niches['abattement_frais_pro']:,.0f}€  
+            **Revenu imposable initial :** {meilleur_avec_niches['revenu_imposable']:,.0f}€  
+            
+            **Déductions fiscales :**  
+            • PER : {meilleur_avec_niches.get('per_deduction', 0):,.0f}€  
+            **Revenu imposable final :** {meilleur_avec_niches.get('revenu_imposable_final', meilleur_avec_niches['revenu_imposable']):,.0f}€  
+            """)
             
             if ir_detail_str.strip():
                 with st.expander(f"**IR :** {meilleur_avec_niches.get('ir_avant_girardin', meilleur_avec_niches['ir_remuneration']):,.0f}€  "):
@@ -583,26 +571,15 @@ def main():
             **IR final :** {meilleur_avec_niches['ir_remuneration']:,.0f}€  
             """)
             
-            if forme_juridique == "SAS":
-                st.markdown(f"""
-                **💰 Salaire net après IR :** {meilleur_avec_niches.get('salaire_net_final', meilleur_avec_niches['remuneration_nette_apres_ir']):,.0f}€
-                
-                **💰 Placement PER :** {meilleur_avec_niches.get('per_deduction', 0):,.0f}€  
-                
-                **📊 Taux prélèvement personnel :** {(1-meilleur_avec_niches.get('salaire_net_final', meilleur_avec_niches['remuneration_nette_apres_ir']) / (meilleur_avec_niches.get('cout_total_salaire', meilleur_avec_niches['remuneration_brute']))) * 100:.1f}%
-                
-                **🏭 INVESTISSEMENT GIRARDIN :** -{meilleur_avec_niches['optimisations']['girardin']:,.0f}€
-                """)
-            else:
-                st.markdown(f"""
-                **💰 Salaire net après IR :** {meilleur_avec_niches['remuneration_nette_apres_ir']-meilleur_avec_niches.get('per_deduction', 0):,.0f}€
-                
-                **💰 Placement PER :** {meilleur_avec_niches.get('per_deduction', 0):,.0f}€  
-                
-                **📊 Taux prélèvement personnel :** {(1-meilleur_avec_niches['remuneration_nette_apres_ir'] / (meilleur_avec_niches.get('cotisations_tns', 0) +  meilleur_avec_niches['remuneration_brute'])) * 100:.1f}%
-                
-                **🏭 INVESTISSEMENT GIRARDIN :** -{meilleur_avec_niches['optimisations']['girardin']:,.0f}€
-                """)
+            st.markdown(f"""
+            **💰 Salaire net après IR :** {meilleur_avec_niches['remuneration_nette_apres_ir']-meilleur_avec_niches.get('per_deduction', 0):,.0f}€
+            
+            **💰 Placement PER :** {meilleur_avec_niches.get('per_deduction', 0):,.0f}€  
+            
+            **📊 Taux prélèvement personnel :** {(1-meilleur_avec_niches['remuneration_nette_apres_ir'] / (meilleur_avec_niches.get('cotisations_tns', 0) +  meilleur_avec_niches['remuneration_brute'])) * 100:.1f}%
+            
+            **🏭 INVESTISSEMENT GIRARDIN :** -{meilleur_avec_niches['optimisations']['girardin']:,.0f}€
+            """)
         
         with col_resume3:
             if forme_juridique == "SARL + Holding":

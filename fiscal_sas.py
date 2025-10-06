@@ -37,12 +37,12 @@ class SAS(OptimisationFiscale):
         resultats['cout_total_salaire'] = cout_total_salaire
         
         # Salaire net avant IR
-        salaire_net_avant_ir = salaire_brut - cotisations_salariales
-        resultats['salaire_net_avant_ir'] = salaire_net_avant_ir
+        remuneration_nette_avant_ir = salaire_brut - cotisations_salariales
+        resultats['remuneration_nette_avant_ir'] = remuneration_nette_avant_ir
         
         # Revenu imposable avec abattement 10% (avant PER)
-        abattement = min(salaire_net_avant_ir * ABATTEMENT_FRAIS_PRO, PLAFOND_ABATTEMENT_FRAIS_PRO)
-        revenu_imposable = salaire_net_avant_ir - abattement
+        abattement = min(remuneration_nette_avant_ir * ABATTEMENT_FRAIS_PRO, PLAFOND_ABATTEMENT_FRAIS_PRO)
+        revenu_imposable = remuneration_nette_avant_ir - abattement
         resultats['abattement_frais_pro'] = abattement
         resultats['revenu_imposable'] = revenu_imposable  # Pour PER dans la base
         
@@ -52,7 +52,7 @@ class SAS(OptimisationFiscale):
         resultats['ir_detail'] = ir_detail
         
         # Salaire net de base
-        resultats['remuneration_nette_avant_ir'] = salaire_net_avant_ir
+        resultats['remuneration_nette_avant_ir'] = remuneration_nette_avant_ir
         
         # Résultat après charges sociales et salaires
         resultat_apres_remuneration = self.resultat_avant_remuneration - cout_total_salaire
@@ -76,7 +76,7 @@ class SAS(OptimisationFiscale):
         resultats['dividendes_nets'] = dividendes_nets
         
         # Total net de base (avant PER/Girardin)
-        salaire_net_base = salaire_net_avant_ir - ir_base
+        salaire_net_base = remuneration_nette_avant_ir - ir_base
         total_net = salaire_net_base + max(0, dividendes_nets)
         resultats['total_net'] = total_net
         
